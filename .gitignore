@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Local cluster state / downloads
+dev/.cache/
+dev/volumes/
+*.tgz
+*.tar.gz
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+!infra/terraform/*.tfvars.example
+
+# Secrets
+*.pem
+.env
+
+# OS
+.DS_Store
+bench/.samples/
+infra/ansible/inventory.ini
+
+# Results and figures of the test runs on the local cluster (not for the report)
+results/dev/
+analysis/figures/dev/
+java/build/
