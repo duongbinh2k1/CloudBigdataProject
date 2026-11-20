@@ -1,0 +1,4 @@
+# Analysis environment (runs on the laptop, Python >= 3.9): make analysis-venv
+pandas==2.2.3
+matplotlib==3.9.4
+pyyaml==6.0.2

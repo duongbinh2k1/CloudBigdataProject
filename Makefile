@@ -26,3 +26,6 @@ experiments: jar
 
 codec-bench:
 	$(RUN) bash bench/codec_bench.sh results/dev/codec_bench
+
+analysis:
+	.venv/bin/python analysis/report.py results/dev/dev
