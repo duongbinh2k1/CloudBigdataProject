@@ -99,4 +99,4 @@ Bảng (`tables/`): `summary.csv` (trung bình, độ lệch chuẩn của mọi
 | Hết tiền AWS (~1 USD/giờ khi bật) | Budget Alert, chỉ bật cluster khi chạy, `make down ENV=aws` khi xong |
 | Quota vCPU thấp (cần 16) | xin tăng quota sớm |
 | Đầy đĩa | 200 GB/node, output xoá ngay sau mỗi lần đo |
-| zstd lưu trữ không chạy trên EC2 | kiểm tra ngay sau khi dựng cluster (AWS.md); nếu không được thì bỏ zstd ở mức lưu trữ và nêu trong báo cáo |
+| zstd lưu trữ không chạy trên EC2 | lộ ra ngay ở bước sinh dữ liệu đầu tiên của `make run ENV=aws` (xem AWS.md); nếu không sửa được thì bỏ zstd ở mức lưu trữ và nêu trong báo cáo |

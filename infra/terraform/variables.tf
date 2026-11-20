@@ -3,7 +3,7 @@ variable "region" {
 }
 
 variable "my_ip_cidr" {
-  description = "My public IP + /32 (curl -s https://checkip.amazonaws.com), the only address allowed to SSH"
+  description = "My public IP + /32, the only address allowed to SSH (set by make up ENV=aws)"
 }
 
 variable "instance_type" {

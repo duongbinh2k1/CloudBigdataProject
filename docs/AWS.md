@@ -8,23 +8,15 @@ Mọi lệnh chạy trên laptop, trong thư mục project (bảng lệnh ở [R
 - [ ] **Quota vCPU**: 4 × m5.xlarge = 16 vCPU. Kiểm tra *Service Quotas → EC2 → Running On-Demand Standard instances* ở vùng eu-west-3. Tài khoản mới thường chỉ có 5 hoặc 8 vCPU → xin tăng sớm (có thể mất 1–2 ngày).
 - [ ] `aws configure` (access key của một user IAM, vùng `eu-west-3`).
 - [ ] Cài công cụ trên laptop: `brew install terraform ansible` (gói `ansible` có sẵn collection `ansible.posix` mà playbook cần).
-- [ ] Khoá SSH: `ssh-keygen -t ed25519 -f ~/.ssh/cloud-bigdata-project`.
-- [ ] `infra/terraform/terraform.tfvars` (copy từ `terraform.tfvars.example`) với IP của mình (`curl -s https://checkip.amazonaws.com`, thêm `/32`). Nếu IP nhà thay đổi, sửa file này rồi `make up ENV=aws` lại.
+
+Khoá SSH (`~/.ssh/cloud-bigdata-project`) được `make up ENV=aws` tự tạo nếu chưa có. Chỉ IP hiện tại của laptop được phép SSH vào cluster (lấy tự động mỗi lần `make up`/`make down`); nếu IP nhà thay đổi, chạy lại `make up ENV=aws`.
 
 ## 2. Dựng cluster
 
 1. `make up ENV=aws`: Terraform tạo 4 máy trong cùng một availability zone, rồi Ansible cài và khởi động HDFS + Spark, copy `java/` + `bench/` lên `/opt/work` và build jar. Playbook dừng lại nếu `hadoop checknative` không báo `zstd: true`.
-2. `make shell ENV=aws` (vào master, đồng thời mở web UI trên localhost), rồi kiểm tra:
-   - `hdfs dfsadmin -report` → 3 DataNode; http://localhost:8080 → 3 worker;
-   - **zstd lưu trữ chạy được với Spark**:
-     ```bash
-     cd /opt/work
-     spark-submit --class compression.datagen.Generator java/build/cloud-bigdata-project.jar 0.01 hdfs://master:9000/smoke zstd
-     spark-submit --class compression.apps.IoBound java/build/cloud-bigdata-project.jar \
-         hdfs://master:9000/smoke/sf0.01/zstd/lineitem hdfs://master:9000/smoke/out zstd
-     hdfs dfs -ls hdfs://master:9000/smoke/out      # part-*.zst
-     ```
-     Nếu lỗi `native zStandard library not available`: kiểm tra `spark.*.extraLibraryPath` trong `/opt/spark/conf/spark-defaults.conf`. Nếu vẫn lỗi thì bỏ `zstd` khỏi `storage_codecs` (đề ghi *"where supported"*) và nêu trong báo cáo.
+2. (Tuỳ chọn) `make shell ENV=aws` rồi `hdfs dfsadmin -report` → 3 DataNode; http://localhost:8080 → 3 worker.
+
+zstd không cần kiểm tra riêng: `make run ENV=aws` sinh dữ liệu zstd ngay ở bước đầu. Nếu thư viện native không chạy, script dừng ở đó và `make status ENV=aws` hiện lỗi. Khi đó kiểm tra `spark.*.extraLibraryPath` trong `/opt/spark/conf/spark-defaults.conf`; nếu vẫn lỗi thì bỏ `zstd` khỏi `storage_codecs` trong `bench/experiments-aws.yaml` (đề ghi *"where supported"*), `make up ENV=aws` để copy file mới lên, rồi `make run ENV=aws`, và nêu điều này trong báo cáo.
 
 Sửa code sau khi cluster đã chạy: chạy lại `make up ENV=aws` (Terraform không thay đổi gì, Ansible copy lại code và build lại jar).
 

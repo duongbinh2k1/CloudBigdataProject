@@ -1,23 +1,28 @@
-# Every command runs on the laptop.
-#   make up / run / analysis / down              local cluster (containers)
-#   make up / run / status / fetch / analysis / down ENV=aws    EC2 cluster
+# Every command runs on the laptop. ENV=dev (default): local cluster in containers.
+# ENV=aws: EC2 cluster. Same commands for both:
+#   make up         start the cluster
+#   make run        whole study (bench/run_all.sh on the master)
+#   make status     progress
+#   make fetch      copy the results to the laptop
+#   make analysis   figures and tables -> analysis/figures/<env>/
+#   make shell      shell on the master
+#   make down       stop the cluster (aws: delete it)
 ENV ?= dev
 
 DC = podman compose -f dev/compose.yml
-KEY = ~/.ssh/cloud-bigdata-project
+KEY = $(HOME)/.ssh/cloud-bigdata-project
 MASTER_IP = $(shell terraform -chdir=infra/terraform output -raw master_public_ip 2>/dev/null)
 SSH = ssh -i $(KEY) -o StrictHostKeyChecking=accept-new ubuntu@$(MASTER_IP)
+# Terraform with my current public IP (the only address allowed to SSH into the nodes)
+TF = TF_VAR_my_ip_cidr=$$(curl -s https://checkip.amazonaws.com)/32 terraform -chdir=infra/terraform
 
-.PHONY: up run status fetch analysis down shell cluster-ip
+.PHONY: up run status fetch analysis shell down cluster-ip
 
 ifeq ($(ENV),aws)
 
-cluster-ip:
-	@test -n "$(MASTER_IP)" || { echo "no EC2 cluster: run make up ENV=aws first"; exit 1; }
-
-up:
-	terraform -chdir=infra/terraform init
-	terraform -chdir=infra/terraform apply
+up: $(KEY)
+	$(TF) init
+	$(TF) apply
 	cd infra/ansible && ansible-playbook cluster.yml
 
 # in tmux on the master, so it keeps running when the laptop is off
@@ -26,7 +31,7 @@ run: cluster-ip
 	@echo "started on the master. Follow with: make status ENV=aws"
 
 status: cluster-ip
-	$(SSH) "tmux ls; tail -n 5 /opt/work/results/aws/run.log; grep -c ',ok,' /opt/work/results/aws/runs.csv"
+	$(SSH) "tmux ls; tail -n 5 /opt/work/results/aws/run.log; echo runs ok: \$$(grep -c ',ok,' /opt/work/results/aws/runs.csv)"
 
 fetch: cluster-ip
 	mkdir -p results/aws
@@ -36,7 +41,14 @@ shell: cluster-ip
 	$(SSH) -L 8080:master:8080 -L 18080:master:18080 -L 9870:master:9870
 
 down:
-	terraform -chdir=infra/terraform destroy
+	$(TF) destroy
+
+cluster-ip:
+	@test -n "$(MASTER_IP)" || { echo "no EC2 cluster: run make up ENV=aws first"; exit 1; }
+
+$(KEY):
+	mkdir -p $(HOME)/.ssh
+	ssh-keygen -t ed25519 -N "" -C cloud-bigdata-project -f $(KEY)
 
 else
 
@@ -46,6 +58,12 @@ up:
 run:
 	$(DC) exec master bash bench/run_all.sh dev
 
+status:
+	@echo "runs ok: $$(grep -c ',ok,' results/dev/runs.csv 2>/dev/null || echo 0)"
+
+fetch:
+	@echo "nothing to do: the local cluster writes directly to results/dev"
+
 shell:
 	$(DC) exec master bash
 
@@ -54,6 +72,10 @@ down:
 
 endif
 
-# on the laptop, from the results of run (and fetch for aws)
-analysis:
+analysis: .venv/bin/python
 	.venv/bin/python analysis/report.py results/$(ENV)
+
+# Python environment for the figures, created once
+.venv/bin/python:
+	/usr/bin/python3 -m venv .venv
+	.venv/bin/pip install -q -r analysis/requirements.txt

@@ -32,16 +32,16 @@ build the jar, generate the datasets, codec micro-benchmark, then the experiment
 |---|---|---|
 | Start the cluster | `make up` | `make up ENV=aws` (Terraform + Ansible) |
 | Run everything | `make run` | `make run ENV=aws` (in tmux on the master, the laptop can be turned off) |
-| Progress | printed directly | `make status ENV=aws` |
-| Get the results | already local | `make fetch ENV=aws` |
+| Progress | `make status` | `make status ENV=aws` |
+| Get the results | `make fetch` (nothing to do) | `make fetch ENV=aws` |
 | Figures and tables | `make analysis` | `make analysis ENV=aws` |
 | Shell on the master | `make shell` | `make shell ENV=aws` (also opens the web UIs on localhost) |
 | Stop | `make down` | `make down ENV=aws` (deletes the EC2 cluster) |
 
-Once, for the figures: `python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt`.
+`make analysis` creates the Python environment (`.venv`) the first time. `make up ENV=aws` creates
+the SSH key `~/.ssh/cloud-bigdata-project` if needed and only allows SSH from your current public IP.
 
 Web UIs: HDFS http://localhost:9870, Spark http://localhost:8080, History Server http://localhost:18080.
 
-Before the first `make up ENV=aws`: SSH key `ssh-keygen -t ed25519 -f ~/.ssh/cloud-bigdata-project`,
-`aws configure`, and `infra/terraform/terraform.tfvars` with your IP (copy the `.example`).
-Checklist, checks and cost: [docs/AWS.md](docs/AWS.md).
+Before the first `make up ENV=aws`: an AWS account with 16 vCPU of quota, `aws configure`,
+`brew install terraform ansible`. Checklist and cost: [docs/AWS.md](docs/AWS.md).
