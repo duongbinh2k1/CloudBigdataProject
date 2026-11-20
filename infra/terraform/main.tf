@@ -53,6 +53,7 @@ resource "aws_instance" "node" {
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key.key_name
   vpc_security_group_ids = [aws_security_group.cluster.id]
+  availability_zone      = "${var.region}a" # all nodes in the same zone (same network, no cross-zone cost)
 
   root_block_device {
     volume_type = "gp3" # constant 3000 IOPS / 125 MB/s, no burst credits
