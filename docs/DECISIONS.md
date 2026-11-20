@@ -1,0 +1,33 @@
+# Các lựa chọn kỹ thuật và lý do
+
+**Spark thay vì MapReduce.** Spark có cấu hình nén shuffle riêng, tách khỏi nén lưu trữ, nên đo được từng mức. History Server cho sẵn số byte shuffle và thời gian CPU.
+
+**Spark standalone, Hadoop chỉ dùng HDFS.** Ít daemon hơn YARN và đề bài không yêu cầu YARN.
+
+**Java + API RDD, file text.** Đúng như slide và TP của môn. Nén lưu trữ là nén cả file bằng codec Hadoop (`saveAsTextFile(path, codec)`). Python chỉ dùng để điều phối thí nghiệm và vẽ đồ thị, không chạy trong Spark.
+
+**Dữ liệu kiểu TPC-H tự sinh.** Hai bảng `orders` và `lineitem`, CSV phân tách bằng `|`. Mỗi giá trị là hàm băm của (seed, cột, khoá), nên cùng tham số thì cho cùng dữ liệu, với bất kỳ số node nào. Dữ liệu "giống thật" nên nén được (dữ liệu ngẫu nhiên thì không), và có khoá để join. SF 1 ≈ 1 GB.
+
+**150 000 đơn hàng mỗi file.** File text nén **không chia nhỏ được**: 1 file = 1 task. Mỗi file `lineitem` ≈ 85 MB, nhỏ hơn một block HDFS (128 MB), nên mọi codec, kể cả `none`, đều có cùng số task và chỉ có nén là thay đổi. Trong báo cáo cần nêu: với file lớn, nén không chia nhỏ được sẽ làm mất song song khi đọc.
+
+**zstd lưu trữ = `ZStandardCodec` của Hadoop.** Codec này cần thư viện native `libhadoop.so` + `libzstd`. Bản Hadoop chính thức chỉ có thư viện này cho x86_64, nên dùng được trên EC2 nhưng không chạy trên Mac ARM: ở dev chỉ dùng none/gzip/snappy/lz4. Ansible cài `libzstd1`, đặt `extraLibraryPath` và kiểm tra `hadoop checknative`.
+
+**Cố định `spark.default.parallelism`** (dev 8, AWS 48 = 3 worker × 4 core × 4): đây là số partition của mọi shuffle trong RDD, nên giữ cố định để chỉ có nén thay đổi.
+
+**Ba app tách biệt rõ.** Đo bằng lượng dữ liệu di chuyển trên mỗi giây CPU: io_bound ≈ 126 MB/s CPU, balanced ≈ 33, cpu_bound ≈ 13 (ở dev). Số vòng SHA-256 (64 và 8) được chỉnh để đạt được khoảng cách này.
+
+**Phương pháp đo.** 5 lần lặp, thứ tự xáo trộn bằng seed (để khoảng thời gian cluster chậm không luôn rơi vào cùng một codec), 1 lần khởi động mỗi app, xoá page cache trên mọi node, chạy tiếp được nếu bị ngắt.
+
+**Hạ tầng AWS.** 1 master + 3 worker `m5.xlarge` (4 vCPU, 16 GB), đĩa gp3 200 GB, Ubuntu 22.04, eu-west-3, VPC mặc định. Không dùng t3 (credit CPU cạn dần) hay gp2 (credit I/O), vì hiệu năng sẽ thay đổi trong lúc đo. Ít nhất 2 máy theo yêu cầu của thầy, để shuffle đi qua mạng thật. Dung lượng: SF 1+5+10+20 với 5 codec ≈ 88 GB trên mỗi worker (3 bản sao), cộng thêm file shuffle.
+
+**Cài trực tiếp bằng Ansible, không dùng container trên AWS.** Không có mạng overlay xen vào số đo mạng. Thứ tự giống TP: cấu hình, rồi `start-dfs.sh`, rồi `start-master.sh` / `start-workers.sh`. Ở laptop thì dùng container (Podman Compose) vì chỉ để phát triển.
+
+**Đo 4 thuật toán, vẽ nổi bật 2 (LZ4 + Zstd).** Đây là một codec nhanh và một codec nén mạnh, có mặt ở cả hai mức. Gzip chỉ có ở mức lưu trữ.
+
+**Không giả lập mạng chậm.** Đề bài không yêu cầu. Mạng m5 nhanh (nền ~1,25 Gbps, burst tới 10 Gbps) nên lợi ích của nén shuffle có thể nhỏ; cần giải thích bằng thời gian chờ fetch và lưu lượng mạng.
+
+| Phần mềm | Phiên bản |
+|---|---|
+| Java | 11 |
+| Hadoop | 3.4.1 |
+| Spark | 3.5.5 (bản kèm Hadoop 3) |
