@@ -1,6 +1,6 @@
 # Kế hoạch — Đánh giá thực nghiệm nén dữ liệu trong Spark
 
-Đề bài: `CoursCloudN7/ProjectUSTH.pdf`. Lý do của từng lựa chọn: [DECISIONS.md](DECISIONS.md). Số liệu dev và giới hạn: [NOTES.md](NOTES.md). Chạy trên AWS: [AWS.md](AWS.md).
+Đề bài: `CoursCloudN7/ProjectUSTH.pdf`. Lý do của từng lựa chọn: [DECISIONS.md](DECISIONS.md). Số liệu dev và giới hạn: [NOTES.md](NOTES.md). Chạy trên AWS: [AWS.md](AWS.md). Giải thích toàn bộ project: [GUIDE.md](GUIDE.md). Câu hỏi bảo vệ: [QA.md](QA.md).
 
 ## 1. Hai mức nén
 
