@@ -1,0 +1,5 @@
+hadoop_version: "3.4.1"
+spark_version: "3.5.5"
+hadoop_url: "https://archive.apache.org/dist/hadoop/common/hadoop-{{ hadoop_version }}/hadoop-{{ hadoop_version }}-lean.tar.gz"
+spark_url: "https://archive.apache.org/dist/spark/spark-{{ spark_version }}/spark-{{ spark_version }}-bin-hadoop3.tgz"
+java_home: /usr/lib/jvm/java-11-openjdk-amd64
