@@ -16,7 +16,7 @@ Codec: none, gzip, snappy, lz4, zstd. Gzip **không có** cho shuffle trong Spar
 | Môi trường | Dùng để | Công nghệ |
 |---|---|---|
 | Dev | viết và thử code | Podman Compose trên laptop: 1 master + 2 worker container |
-| AWS (Singapore) | số liệu của báo cáo | 4 máy EC2 m5.xlarge (1 master + 3 worker) — Terraform + Ansible; test trước bằng m7i-flex.large (Free plan) |
+| AWS (Sydney) | số liệu của báo cáo | 4 máy EC2 m5.xlarge (1 master + 3 worker) — Terraform + Ansible; test trước bằng m7i-flex.large (Free plan) |
 
 ```
 master  : NameNode + Spark Master + History Server (+ driver, run_experiments.py)

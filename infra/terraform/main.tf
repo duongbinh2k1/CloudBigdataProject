@@ -1,4 +1,4 @@
-# 1 master + N workers on EC2, in the default VPC of the account.
+# 1 master + N workers on EC2, in their own network (VPC) with one public subnet.
 locals {
   names = concat(["master"], [for i in range(1, var.worker_count + 1) : "worker${i}"])
 }
@@ -13,14 +13,43 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-data "aws_vpc" "default" {
-  default = true
+# Network: a VPC with one public subnet, so that the nodes have a public IP (SSH from the
+# laptop, downloads) and talk to each other on their private IPs. All in one availability zone.
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  tags                 = { Name = "cloud-bigdata-project" }
+}
+
+resource "aws_subnet" "main" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "${var.region}a" # all nodes in the same zone (same network, no cross-zone cost)
+  map_public_ip_on_launch = true
+  tags                    = { Name = "cloud-bigdata-project" }
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "main" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+}
+
+resource "aws_route_table_association" "main" {
+  subnet_id      = aws_subnet.main.id
+  route_table_id = aws_route_table.main.id
 }
 
 # SSH only from my IP; all traffic between the nodes of the cluster (HDFS, Spark, shuffle).
 resource "aws_security_group" "cluster" {
   name   = "cloud-bigdata-project"
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port   = 22
@@ -52,8 +81,8 @@ resource "aws_instance" "node" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key.key_name
+  subnet_id              = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.cluster.id]
-  availability_zone      = "${var.region}a" # all nodes in the same zone (same network, no cross-zone cost)
 
   root_block_device {
     volume_type = "gp3" # constant 3000 IOPS / 125 MB/s, no burst credits

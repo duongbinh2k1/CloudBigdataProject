@@ -1,5 +1,7 @@
 variable "region" {
-  default = "ap-southeast-1" # Singapore, the closest region to Vietnam
+  # Sydney: the only region allowed on this account's Free plan (Singapore, ap-southeast-1,
+  # is closer to Vietnam: use it if the account allows it, e.g. after upgrading the plan)
+  default = "ap-southeast-2"
 }
 
 variable "my_ip_cidr" {

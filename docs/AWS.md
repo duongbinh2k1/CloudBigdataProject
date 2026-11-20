@@ -5,9 +5,10 @@ Mọi lệnh chạy trên laptop, trong thư mục project (bảng lệnh ở [R
 ## 1. Chuẩn bị (một lần)
 
 - [ ] **Budget Alert** trong AWS Billing (ví dụ 50 USD) để được báo khi chi phí vượt mức.
-- [ ] **Quota vCPU** ở vùng Singapore (`ap-southeast-1`): *Service Quotas → EC2 → Running On-Demand Standard instances*. Cluster test (4 × m7i-flex.large) cần 8 vCPU, cluster chính thức (4 × m5.xlarge) cần 16 vCPU. Tài khoản mới thường chỉ có 5 hoặc 8 vCPU → xin tăng sớm (có thể mất 1–2 ngày). Nếu chưa đủ cho bản test, tạm đặt `worker_count = 2` trong `variables.tf`.
+- [ ] **Vùng được phép**: tài khoản Free plan này chỉ được dùng **Sydney (`ap-southeast-2`)**; các vùng khác (kể cả Singapore) bị một chính sách của AWS Organization chặn. Terraform đang dùng Sydney. Từ Việt Nam đến Sydney xa hơn nhưng không ảnh hưởng số đo (số đo là mạng giữa các máy trong cluster, cùng một zone). Nếu sau khi nâng lên Paid plan Singapore được mở, đổi `region` trong `infra/terraform/variables.tf`.
+- [ ] **Quota vCPU** ở Sydney: *Service Quotas → EC2 → Running On-Demand Standard instances*. Hiện là **16 vCPU**: đủ cho cluster test (4 × m7i-flex.large = 8 vCPU) và cluster chính thức (4 × m5.xlarge = 16 vCPU).
 - [ ] **Gói tài khoản**: Free plan chỉ cho một số loại máy (có `m7i-flex.large`, không có `m5.xlarge`). Kiểm tra trong *EC2 → Instance Types*. Để chạy số liệu chính thức với `m5.xlarge`, chuyển lên Paid plan: credit còn lại vẫn được dùng, chỉ tính tiền vào thẻ khi hết credit.
-- [ ] `aws configure` (access key của một user IAM; vùng mặc định không quan trọng, Terraform dùng `ap-southeast-1`).
+- [ ] `aws configure` (access key của một user IAM có `AdministratorAccess`; vùng `ap-southeast-2` cho khớp với Terraform).
 - [ ] Cài công cụ trên laptop: `brew install terraform ansible` (gói `ansible` có sẵn collection `ansible.posix` mà playbook cần).
 
 Khoá SSH (`~/.ssh/cloud-bigdata-project`) được `make up ENV=aws` tự tạo nếu chưa có. Chỉ IP hiện tại của laptop được phép SSH vào cluster (lấy tự động mỗi lần `make up`/`make down`); nếu IP nhà thay đổi, chạy lại `make up ENV=aws`.
@@ -32,7 +33,7 @@ Sửa code sau khi cluster đã chạy: chạy lại `make up ENV=aws` (Terrafor
 
 - [ ] `make fetch ENV=aws` kéo `results/aws/` về laptop và **kiểm tra file đã về đủ** (số dòng `ok` trong `runs.csv`) trước khi xoá cluster.
 - [ ] `make down ENV=aws` → xoá máy, ổ đĩa, security group, key pair (Terraform hỏi xác nhận).
-- [ ] Kiểm tra trong console EC2 không còn máy hay volume nào (vùng Singapore).
+- [ ] Kiểm tra trong console EC2 không còn máy hay volume nào (vùng Sydney).
 - [ ] `make analysis ENV=aws`, rồi commit `results/aws/`.
 
 ## Đổi cấu hình
@@ -56,7 +57,7 @@ Thêm kích thước, codec hay số lần lặp thì chỉ các lần chạy m�
 
 Hai chỗ đổi đều có ghi chú `TEMPORARY` trong file. Máy "flex" không đảm bảo luôn có 100% CPU, nên số đo trên cluster test không dùng cho báo cáo. Giữa hai giai đoạn: `make down ENV=aws`, sửa hai file, rồi `make up ENV=aws` và `make run ENV=aws` lại từ đầu (dữ liệu và kết quả trên cluster cũ bị xoá theo).
 
-## Chi phí (ước tính, kiểm tra lại trên trang giá EC2 cho vùng Singapore)
+## Chi phí (ước tính, kiểm tra lại trên trang giá EC2 cho vùng Sydney)
 
 | Mục | 4 máy, khi cluster đang bật |
 |---|---|

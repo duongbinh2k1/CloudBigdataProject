@@ -94,7 +94,7 @@ Mặc định Spark **bật** nén shuffle với LZ4. Trong thí nghiệm, scrip
    make up / run / status / fetch / analysis / down ENV=aws
         │ Terraform (API AWS)   │ Ansible (SSH)    │ SSH, rsync
         ▼                       ▼                  ▼
-┌──────────────────── AWS, vùng Singapore, một availability zone ─────────────────────┐
+┌───────────────────── AWS, vùng Sydney, một availability zone ───────────────────────┐
 │  master                                                                              │
 │    HDFS NameNode · Spark Master · Spark History Server                               │
 │    driver của các app · bench/run_all.sh, run_experiments.py (trong tmux)            │
@@ -104,7 +104,8 @@ Mặc định Spark **bật** nén shuffle với LZ4. Trong thí nghiệm, scrip
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- 4 máy EC2 cùng loại (hiện tại `m7i-flex.large` để test, `m5.xlarge` cho số liệu chính thức), Ubuntu 22.04, đĩa gp3 200 GB.
+- 4 máy EC2 cùng loại (hiện tại `m7i-flex.large` để test, `m5.xlarge` cho số liệu chính thức), Ubuntu 22.04, đĩa gp3 200 GB, trong một VPC riêng do Terraform tạo.
+- Vùng Sydney (`ap-southeast-2`): vùng duy nhất tài khoản Free plan được phép dùng.
 - Ít nhất 2 máy thật để shuffle đi qua **mạng thật** (yêu cầu của thầy). 3 worker để có song song.
 - Chỉ IP hiện tại của laptop được SSH vào cluster (security group).
 
@@ -468,6 +469,7 @@ Công thức:
 
 **Terraform (`infra/terraform/`)**: tạo hạ tầng trên AWS bằng code.
 - `data "aws_ami"`: tìm image Ubuntu 22.04 x86_64 mới nhất của Canonical.
+- `aws_vpc`, `aws_subnet`, `aws_internet_gateway`, `aws_route_table`: mạng riêng 10.0.0.0/16 với một subnet công khai ở một availability zone, để các máy có IP công khai (SSH, tải gói) và nói chuyện với nhau qua IP riêng.
 - `aws_security_group`: SSH (cổng 22) chỉ từ IP của bạn; mọi cổng giữa các máy trong cluster; ra Internet thoải mái (tải gói).
 - `aws_key_pair`: khoá SSH công khai của bạn.
 - `aws_instance` × 4 (`for_each` trên master, worker1..N): cùng loại máy, cùng availability zone, đĩa gp3.

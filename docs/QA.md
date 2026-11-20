@@ -29,7 +29,7 @@ Spark có cấu hình nén shuffle riêng (`spark.shuffle.compress`, `spark.io.c
 ## B. Hạ tầng
 
 **B1. Cluster gồm những gì?**
-4 máy EC2 cùng loại ở Singapore, cùng một availability zone: 1 master (NameNode, Spark Master, History Server, chạy driver và script thí nghiệm) và 3 worker (mỗi máy một DataNode và một Spark Worker). DataNode và Worker đặt chung máy để Spark đọc block HDFS ngay tại chỗ (data locality).
+4 máy EC2 cùng loại ở Sydney, trong một VPC riêng, cùng một availability zone: 1 master (NameNode, Spark Master, History Server, chạy driver và script thí nghiệm) và 3 worker (mỗi máy một DataNode và một Spark Worker). DataNode và Worker đặt chung máy để Spark đọc block HDFS ngay tại chỗ (data locality).
 
 **B2. Vì sao ít nhất 2 máy, vì sao không chạy tất cả trên 1 máy?**
 Để shuffle đi qua mạng thật. Trên một máy, "mạng" chỉ là bộ nhớ nên nén truyền thông không có ý nghĩa. Ngoài ra các tiến trình dùng chung CPU và đĩa, số đo bị nhiễu.
@@ -41,7 +41,10 @@ Spark có cấu hình nén shuffle riêng (`spark.shuffle.compress`, `spark.io.c
 Chỉ để **test** cluster vì nó có trong Free plan của AWS. Máy "flex" không đảm bảo luôn có 100% CPU nên số đo trên đó không dùng cho báo cáo.
 
 **B5. Terraform làm gì? Vì sao dùng?**
-Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và TP Terraform): image Ubuntu, security group, key pair, 4 máy EC2, và file `inventory.ini` cho Ansible. Lợi ích: tái lập được (`terraform apply` lại ra đúng cluster), xoá sạch được (`terraform destroy`), không thao tác tay trên console. File: `infra/terraform/main.tf`.
+Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và TP Terraform): mạng (VPC, subnet, internet gateway, bảng định tuyến), security group, key pair, 4 máy EC2, và file `inventory.ini` cho Ansible. Lợi ích: tái lập được (`terraform apply` lại ra đúng cluster), xoá sạch được (`terraform destroy`), không thao tác tay trên console. File: `infra/terraform/main.tf`.
+
+**B5b. Vì sao chọn vùng Sydney?**
+Tài khoản dùng Free plan của AWS, và tổ chức quản lý tài khoản chỉ cho phép vùng Sydney (`ap-southeast-2`); Singapore gần Việt Nam hơn nhưng bị chặn. Khoảng cách từ Việt Nam không ảnh hưởng số đo, vì mọi số đo là bên trong cluster (các máy cùng một availability zone); chỉ SSH từ laptop trễ hơn một chút.
 
 **B6. Ansible làm gì?**
 Cài đặt và cấu hình các máy đã tạo, qua SSH, theo trình tự của TP: cài Java và gói, tải Hadoop/Spark, điền file cấu hình từ template, SSH không mật khẩu, format NameNode, `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, copy code, build jar. File: `infra/ansible/cluster.yml`.
