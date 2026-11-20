@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <configuration>
-  <property><name>dfs.replication</name><value>{{ replication }}</value></property>
+  <property><name>dfs.replication</name><value>{{ [workers | int, 3] | min }}</value></property>
   <property><name>dfs.blocksize</name><value>134217728</value></property>  <!-- 128 MB -->
   <property><name>dfs.namenode.name.dir</name><value>file:///data/hdfs/namenode</value></property>
   <property><name>dfs.datanode.data.dir</name><value>file:///data/hdfs/datanode</value></property>

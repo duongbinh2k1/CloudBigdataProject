@@ -5,8 +5,9 @@ Mọi lệnh chạy trên laptop, trong thư mục project (bảng lệnh ở [R
 ## 1. Chuẩn bị (một lần)
 
 - [ ] **Budget Alert** trong AWS Billing (ví dụ 50 USD) để được báo khi chi phí vượt mức.
-- [ ] **Quota vCPU**: 4 × m5.xlarge = 16 vCPU. Kiểm tra *Service Quotas → EC2 → Running On-Demand Standard instances* ở vùng eu-west-3. Tài khoản mới thường chỉ có 5 hoặc 8 vCPU → xin tăng sớm (có thể mất 1–2 ngày).
-- [ ] `aws configure` (access key của một user IAM, vùng `eu-west-3`).
+- [ ] **Quota vCPU** ở vùng Singapore (`ap-southeast-1`): *Service Quotas → EC2 → Running On-Demand Standard instances*. Cluster test (4 × m7i-flex.large) cần 8 vCPU, cluster chính thức (4 × m5.xlarge) cần 16 vCPU. Tài khoản mới thường chỉ có 5 hoặc 8 vCPU → xin tăng sớm (có thể mất 1–2 ngày). Nếu chưa đủ cho bản test, tạm đặt `worker_count = 2` trong `variables.tf`.
+- [ ] **Gói tài khoản**: Free plan chỉ cho một số loại máy (có `m7i-flex.large`, không có `m5.xlarge`). Kiểm tra trong *EC2 → Instance Types*. Để chạy số liệu chính thức với `m5.xlarge`, chuyển lên Paid plan: credit còn lại vẫn được dùng, chỉ tính tiền vào thẻ khi hết credit.
+- [ ] `aws configure` (access key của một user IAM; vùng mặc định không quan trọng, Terraform dùng `ap-southeast-1`).
 - [ ] Cài công cụ trên laptop: `brew install terraform ansible` (gói `ansible` có sẵn collection `ansible.posix` mà playbook cần).
 
 Khoá SSH (`~/.ssh/cloud-bigdata-project`) được `make up ENV=aws` tự tạo nếu chưa có. Chỉ IP hiện tại của laptop được phép SSH vào cluster (lấy tự động mỗi lần `make up`/`make down`); nếu IP nhà thay đổi, chạy lại `make up ENV=aws`.
@@ -31,7 +32,7 @@ Sửa code sau khi cluster đã chạy: chạy lại `make up ENV=aws` (Terrafor
 
 - [ ] `make fetch ENV=aws` kéo `results/aws/` về laptop và **kiểm tra file đã về đủ** (số dòng `ok` trong `runs.csv`) trước khi xoá cluster.
 - [ ] `make down ENV=aws` → xoá máy, ổ đĩa, security group, key pair (Terraform hỏi xác nhận).
-- [ ] Kiểm tra trong console EC2 không còn máy hay volume nào (vùng eu-west-3).
+- [ ] Kiểm tra trong console EC2 không còn máy hay volume nào (vùng Singapore).
 - [ ] `make analysis ENV=aws`, rồi commit `results/aws/`.
 
 ## Đổi cấu hình
@@ -46,12 +47,21 @@ Không phải sửa gì khác: Ansible tự tính core, RAM của executor, `par
 
 Thêm kích thước, codec hay số lần lặp thì chỉ các lần chạy mới được chạy thêm; các lần đã `ok` được giữ lại.
 
-## Chi phí (ước tính, kiểm tra lại trên trang giá của AWS)
+## Hai giai đoạn: test rồi chính thức
 
-| Mục | Giá gần đúng (eu-west-3) | 4 máy |
+| | Test (hiện tại) | Chính thức (số liệu báo cáo) |
 |---|---|---|
-| m5.xlarge | ~0,22 USD/giờ | ~0,90 USD/giờ |
-| gp3 200 GB | ~0,09 USD/GB/tháng | ~0,10 USD/giờ |
-| **Tổng** | | **~1 USD/giờ** khi cluster đang bật |
+| `instance_type` (`infra/terraform/variables.tf`) | `m7i-flex.large` (2 vCPU, 8 GB, có trong Free plan) | `m5.xlarge` (4 vCPU, 16 GB) |
+| `sizes`, `repetitions` (`bench/experiments-aws.yaml`) | `[1]`, `1` → 27 lần chạy | `[1, 5, 10, 20]`, `5` → 540 lần chạy |
 
-540 lần chạy, từ vài chục giây (SF 1) đến vài phút (SF 20), cộng thời gian sinh dữ liệu → dự kiến **khoảng 1 ngày** cluster bật, tức **~25–30 USD**. Cluster bị tính tiền cả khi không chạy gì, nên `make down ENV=aws` ngay khi xong.
+Hai chỗ đổi đều có ghi chú `TEMPORARY` trong file. Máy "flex" không đảm bảo luôn có 100% CPU, nên số đo trên cluster test không dùng cho báo cáo. Giữa hai giai đoạn: `make down ENV=aws`, sửa hai file, rồi `make up ENV=aws` và `make run ENV=aws` lại từ đầu (dữ liệu và kết quả trên cluster cũ bị xoá theo).
+
+## Chi phí (ước tính, kiểm tra lại trên trang giá EC2 cho vùng Singapore)
+
+| Mục | 4 máy, khi cluster đang bật |
+|---|---|
+| m5.xlarge | khoảng 1 USD/giờ |
+| m7i-flex.large (test) | khoảng một nửa |
+| gp3 200 GB × 4 | khoảng 0,1 USD/giờ |
+
+Bản test (SF 1, 27 lần chạy) mất khoảng 1–2 giờ. Bản chính thức (540 lần chạy, SF 1 đến 20) dự kiến khoảng 1 ngày, tức khoảng 25–35 USD. Credit của tài khoản mới (100 USD, có thể thêm 100 USD) đủ cho cả hai. Cluster bị tính tiền cả khi không chạy gì, nên `make down ENV=aws` ngay khi xong.

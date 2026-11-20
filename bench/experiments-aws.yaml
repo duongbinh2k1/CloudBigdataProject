@@ -1,7 +1,8 @@
 # Experiments of the report, on the EC2 cluster (machines: infra/terraform/variables.tf)
 seed: 20261111
-repetitions: 5
-sizes: [1, 5, 10, 20]
+# TEMPORARY test on the Free plan machines: for the report, repetitions: 5 and sizes: [1, 5, 10, 20]
+repetitions: 1
+sizes: [1]
 apps: [io_bound, cpu_bound, balanced]
 
 storage_codecs: [none, gzip, snappy, lz4, zstd]   # E1

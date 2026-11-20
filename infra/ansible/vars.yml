@@ -4,11 +4,8 @@ hadoop_url: "https://archive.apache.org/dist/hadoop/common/hadoop-{{ hadoop_vers
 spark_url: "https://archive.apache.org/dist/spark/spark-{{ spark_version }}/spark-{{ spark_version }}-bin-hadoop3.tgz"
 java_home: /usr/lib/jvm/java-11-openjdk-amd64
 
-# Resources computed from the machines themselves (Ansible facts of the first worker),
-# so that only infra/terraform/variables.tf changes when the instance type or the number of workers changes.
+# Read from the machines (all nodes have the same instance type), so that only
+# infra/terraform/variables.tf changes when the machines change. Used in templates/.
 workers: "{{ groups['workers'] | length }}"
-worker_cores: "{{ hostvars[groups['workers'][0]].ansible_processor_vcpus }}"
-worker_memory_gb: "{{ hostvars[groups['workers'][0]].ansible_memtotal_mb // 1024 - 3 }}"   # 3 GB left for the OS and the DataNode
-executor_memory_gb: "{{ worker_memory_gb | int * 10 // 11 }}"                                 # Spark adds 10% (memory overhead) on top
-parallelism: "{{ workers | int * worker_cores | int * 4 }}"                                  # partitions of every shuffle
-replication: "{{ [workers | int, 3] | min }}"
+cores: "{{ hostvars['worker1'].ansible_processor_vcpus }}"
+ram_gb: "{{ hostvars['worker1'].ansible_memtotal_mb // 1024 }}"

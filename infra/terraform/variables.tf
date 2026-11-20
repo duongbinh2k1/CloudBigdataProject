@@ -1,5 +1,5 @@
 variable "region" {
-  default = "eu-west-3" # Paris
+  default = "ap-southeast-1" # Singapore, the closest region to Vietnam
 }
 
 variable "my_ip_cidr" {
@@ -7,7 +7,9 @@ variable "my_ip_cidr" {
 }
 
 variable "instance_type" {
-  default = "m5.xlarge" # 4 vCPU, 16 GB; not a burstable t3 (CPU credits would distort the measurements)
+  # TEMPORARY: m7i-flex.large (2 vCPU, 8 GB) is allowed on the AWS Free plan, to test the cluster.
+  # For the measurements of the report: m5.xlarge (4 vCPU, 16 GB, constant CPU, not "flex" or burstable t3).
+  default = "m7i-flex.large"
 }
 
 variable "worker_count" {
