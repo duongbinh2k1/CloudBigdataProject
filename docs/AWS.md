@@ -34,6 +34,18 @@ Sửa code sau khi cluster đã chạy: chạy lại `make up ENV=aws` (Terrafor
 - [ ] Kiểm tra trong console EC2 không còn máy hay volume nào (vùng eu-west-3).
 - [ ] `make analysis ENV=aws`, rồi commit `results/aws/`.
 
+## Đổi cấu hình
+
+| Muốn đổi | Sửa | Rồi chạy |
+|---|---|---|
+| Loại máy, số worker, dung lượng đĩa, vùng | `infra/terraform/variables.tf` | `make up ENV=aws` |
+| Kích thước dữ liệu, codec, số lần lặp, ứng dụng, cặp codec E3 | `bench/experiments-aws.yaml` | `make up ENV=aws` (copy file lên), `make run ENV=aws` |
+| Độ nặng CPU của app (`rounds`) | `bench/experiments-aws.yaml` | như trên, nhưng trước đó chuyển `results/aws` đi chỗ khác: script từ chối trộn kết quả của hai workload khác nhau |
+
+Không phải sửa gì khác: Ansible tự tính core, RAM của executor, `parallelism` (số worker × core × 4) và số bản sao HDFS từ máy thật; danh sách máy cho `sar` lấy từ danh sách worker của Spark. Cấu hình Spark thực tế của mỗi lần chạy được ghi trong `runs.csv` (`executor_cores`, `executor_memory`, `default_parallelism`).
+
+Thêm kích thước, codec hay số lần lặp thì chỉ các lần chạy mới được chạy thêm; các lần đã `ok` được giữ lại.
+
 ## Chi phí (ước tính, kiểm tra lại trên trang giá của AWS)
 
 | Mục | Giá gần đúng (eu-west-3) | 4 máy |

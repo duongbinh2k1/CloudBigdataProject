@@ -12,7 +12,7 @@
 
 **zstd lưu trữ = `ZStandardCodec` của Hadoop.** Codec này cần thư viện native `libhadoop.so` + `libzstd`. Bản Hadoop chính thức chỉ có thư viện này cho x86_64, nên dùng được trên EC2 nhưng không chạy trên Mac ARM: ở dev chỉ dùng none/gzip/snappy/lz4. Ansible cài `libzstd1`, đặt `extraLibraryPath` và kiểm tra `hadoop checknative`.
 
-**Cố định `spark.default.parallelism`** (dev 8, AWS 48 = 3 worker × 4 core × 4): đây là số partition của mọi shuffle trong RDD, nên giữ cố định để chỉ có nén thay đổi.
+**Tài nguyên Spark tính từ máy, cố định trong mọi lần chạy.** Một executor mỗi worker, dùng hết core của worker; RAM worker = RAM máy − 3 GB (OS, DataNode), RAM executor = RAM worker × 10/11 (Spark dùng thêm 10% ngoài heap, gọi là memory overhead); `spark.default.parallelism` = số worker × số core × 4 (m5.xlarge: 4 core, 10 GB, 48). Ansible tính các giá trị này từ thông tin của chính máy (facts) và ghi vào cấu hình của cluster; ở dev chúng nằm trong `dev/conf/spark/`. Với RDD, `parallelism` là số partition của mọi shuffle, nên giữ cố định để giữa các lần chạy chỉ có nén thay đổi. Mỗi dòng của `runs.csv` ghi lại các giá trị Spark thực sự dùng.
 
 **Ba app tách biệt rõ.** Đo bằng lượng dữ liệu di chuyển trên mỗi giây CPU: io_bound ≈ 126 MB/s CPU, balanced ≈ 33, cpu_bound ≈ 13 (ở dev). Số vòng SHA-256 (64 và 8) được chỉnh để đạt được khoảng cách này.
 
@@ -21,6 +21,8 @@
 **Micro-benchmark bằng chính lớp codec của Spark** (`CodecBench.java`): đo đúng code mà Spark dùng để nén shuffle, trên một máy, không có HDFS hay mạng, để thấy đặc tính riêng của từng codec (§4 của đề).
 
 **E3 dùng zstd (lưu trữ) + lz4 (shuffle)** làm mặc định: một codec nén mạnh cho dữ liệu nằm lâu trên đĩa, một codec nhanh cho dữ liệu chỉ đi qua mạng một lần. Có thể đổi sau khi xem E1/E2.
+
+**Ba lớp cấu hình, mỗi thông số ở một chỗ.** Terraform (`variables.tf`): máy nào, bao nhiêu máy. Ansible: cài đặt, và tài nguyên tính tự động từ máy. YAML (`bench/experiments-<env>.yaml`): chỉ thiết kế thí nghiệm. Đổi phần cứng thì không phải sửa YAML, đổi thí nghiệm thì không phải sửa hạ tầng.
 
 **Phương pháp đo.** 5 lần lặp, thứ tự xáo trộn bằng seed (để khoảng thời gian cluster chậm không luôn rơi vào cùng một codec), 1 lần khởi động mỗi app, xoá page cache trên mọi node, chạy tiếp được nếu bị ngắt.
 

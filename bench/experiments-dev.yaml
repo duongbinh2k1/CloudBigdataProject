@@ -1,4 +1,4 @@
-# Small test on the local cluster
+# Small test on the local cluster (machines: dev/compose.yml, resources: dev/conf/spark/)
 seed: 1
 repetitions: 1
 sizes: [0.1]
@@ -9,12 +9,3 @@ shuffle_codecs: ["off", lz4, snappy, zstd]     # E2 (no gzip for shuffle in Spar
 combined: {storage: gzip, shuffle: lz4}        # E3
 
 rounds: {cpu_bound: 64, balanced: 8}
-
-nodes: [master]
-use_ssh: false
-
-spark_conf:
-  spark.default.parallelism: 8
-  spark.executor.memory: 512m
-  spark.executor.cores: 2
-  spark.driver.memory: 512m

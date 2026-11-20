@@ -1,4 +1,4 @@
-# Experiments on the EC2 cluster (1 master + 3 workers m5.xlarge)
+# Experiments of the report, on the EC2 cluster (machines: infra/terraform/variables.tf)
 seed: 20261111
 repetitions: 5
 sizes: [1, 5, 10, 20]
@@ -9,12 +9,3 @@ shuffle_codecs: ["off", lz4, snappy, zstd]        # E2
 combined: {storage: zstd, shuffle: lz4}           # E3, to choose after E1/E2
 
 rounds: {cpu_bound: 64, balanced: 8}
-
-nodes: [master, worker1, worker2, worker3]
-use_ssh: true
-
-spark_conf:
-  spark.default.parallelism: 48    # 3 workers x 4 cores x 4
-  spark.executor.memory: 10g
-  spark.executor.cores: 4
-  spark.driver.memory: 4g

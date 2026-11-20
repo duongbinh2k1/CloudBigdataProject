@@ -19,6 +19,7 @@ JAR = "java/build/cloud-bigdata-project.jar"
 DATA = "hdfs://master:9000/data"
 OUTPUT = "hdfs://master:9000/results"
 HISTORY = "http://master:18080"
+WORKERS_FILE = "/opt/spark/conf/workers"   # written by Ansible on EC2, absent in the dev containers
 CLASSES = {"io_bound": "compression.apps.IoBound",
            "cpu_bound": "compression.apps.CpuBound",
            "balanced": "compression.apps.Balanced"}
@@ -56,8 +57,9 @@ def submit_command(cfg, app, sf, storage, shuffle, output):
     else:   # lz4, snappy, zstd (Spark has no gzip for shuffle)
         shuffle_conf = {"spark.shuffle.compress": "true", "spark.shuffle.spill.compress": "true",
                         "spark.io.compression.codec": shuffle}
+    # executors, memory and parallelism come from the cluster's spark-defaults.conf
     cmd = ["spark-submit", "--class", CLASSES[app]]
-    for key, value in {**cfg["spark_conf"], **shuffle_conf}.items():
+    for key, value in shuffle_conf.items():
         cmd += ["--conf", f"{key}={value}"]
     data = f"{DATA}/sf{sf:g}/{storage}"
     if app == "balanced":
@@ -68,30 +70,40 @@ def submit_command(cfg, app, sf, storage, shuffle, output):
     return cmd + [JAR] + args + ([str(rounds)] if rounds else [])
 
 
-def on_node(cfg, node, command):
-    # ssh on AWS; on the dev cluster everything runs in the master container
-    argv = ["ssh", node, command] if cfg["use_ssh"] else ["sh", "-c", command]
+def cluster_nodes():
+    # EC2: the master and the workers listed for start-workers.sh, reached by ssh.
+    # Dev: everything runs in the master container.
+    if Path(WORKERS_FILE).exists():
+        return ["master"] + Path(WORKERS_FILE).read_text().split(), True
+    return ["master"], False
+
+
+NODES, USE_SSH = cluster_nodes()
+
+
+def on_node(node, command):
+    argv = ["ssh", node, command] if USE_SSH else ["sh", "-c", command]
     return subprocess.run(argv, capture_output=True, text=True)
 
 
 def run_once(cfg, app, sf, storage, shuffle, name, out_dir):
     output = f"{OUTPUT}/{name}"
     sar_file = f"/tmp/sar-{name}.bin"
-    for node in cfg["nodes"]:
-        if on_node(cfg, node, "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches").returncode != 0:
+    for node in NODES:
+        if on_node(node, "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches").returncode != 0:
             print(f"  warning: could not drop the page cache on {node}")
-        on_node(cfg, node, f"nohup sar -o {sar_file} 1 >/dev/null 2>&1 &")
+        on_node(node, f"nohup sar -o {sar_file} 1 >/dev/null 2>&1 &")
 
     start = time.time()
     proc = subprocess.run(submit_command(cfg, app, sf, storage, shuffle, output), capture_output=True, text=True)
     wall_s = round(time.time() - start, 3)
 
     sar_texts = {}
-    for node in cfg["nodes"]:
-        on_node(cfg, node, "pkill -INT -x sar; sleep 1")
-        sar_texts[node] = {kind: on_node(cfg, node, f"sadf -d {sar_file} -- {flags}").stdout
+    for node in NODES:
+        on_node(node, "pkill -INT -x sar; sleep 1")
+        sar_texts[node] = {kind: on_node(node, f"sadf -d {sar_file} -- {flags}").stdout
                            for kind, flags in metrics.SAR_REPORTS.items()}
-        on_node(cfg, node, f"rm -f {sar_file}")
+        on_node(node, f"rm -f {sar_file}")
         sar_dir = out_dir / "sar" / name
         sar_dir.mkdir(parents=True, exist_ok=True)
         for kind, text in sar_texts[node].items():
@@ -120,8 +132,13 @@ def main():
     cfg = yaml.safe_load(args.config.read_text())
     out_dir = args.results
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "config.yaml").write_text(args.config.read_text())     
     runs_csv = out_dir / "runs.csv"
+    # Adding sizes, codecs or repetitions is fine: only the new runs are done. Changing the
+    # work of an app (rounds) is not: the old runs would be mixed with runs of another workload.
+    old = out_dir / "config.yaml"
+    if runs_csv.exists() and old.exists() and yaml.safe_load(old.read_text()).get("rounds") != cfg.get("rounds"):
+        raise SystemExit(f"rounds changed since the runs in {runs_csv}: move {out_dir} away to start again")
+    old.write_text(args.config.read_text())
 
     done = set()
     if runs_csv.exists():
