@@ -4,7 +4,7 @@
 
 **Spark standalone, Hadoop chỉ dùng HDFS.** Ít daemon hơn YARN và đề bài không yêu cầu YARN.
 
-**Java + API RDD, file text.** Đúng như slide và TP của môn. Nén lưu trữ là nén cả file bằng codec Hadoop (`saveAsTextFile(path, codec)`). Python chỉ dùng để điều phối thí nghiệm và vẽ đồ thị, không chạy trong Spark.
+**Java + API RDD, file text.** Đúng như slide và TP của môn. Nén lưu trữ là nén cả file bằng codec Hadoop (`saveAsTextFile(path, codec)`). Không dùng Parquet: Parquet cần Spark SQL/DataFrame (không có trong môn) và nén theo từng trang nhỏ, khó giải thích hơn. Python chỉ dùng để điều phối thí nghiệm và vẽ đồ thị, không chạy trong Spark.
 
 **Dữ liệu kiểu TPC-H tự sinh.** Hai bảng `orders` và `lineitem`, CSV phân tách bằng `|`. Mỗi giá trị là hàm băm của (seed, cột, khoá), nên cùng tham số thì cho cùng dữ liệu, với bất kỳ số node nào. Dữ liệu "giống thật" nên nén được (dữ liệu ngẫu nhiên thì không), và có khoá để join. SF 1 ≈ 1 GB.
 
@@ -16,9 +16,15 @@
 
 **Ba app tách biệt rõ.** Đo bằng lượng dữ liệu di chuyển trên mỗi giây CPU: io_bound ≈ 126 MB/s CPU, balanced ≈ 33, cpu_bound ≈ 13 (ở dev). Số vòng SHA-256 (64 và 8) được chỉnh để đạt được khoảng cách này.
 
+**Giám sát: Spark History Server + `sar`.** History Server (REST API) cho số đo theo ứng dụng: thời gian CPU của executor, byte shuffle ghi/đọc/qua mạng, thời gian chờ fetch. `sar` (sysstat) cho số đo theo máy: %CPU, %iowait, byte đọc/ghi đĩa, byte mạng. Cả hai có sẵn, không cần cài thêm hệ thống giám sát như Prometheus/Grafana.
+
+**Micro-benchmark bằng chính lớp codec của Spark** (`CodecBench.java`): đo đúng code mà Spark dùng để nén shuffle, trên một máy, không có HDFS hay mạng, để thấy đặc tính riêng của từng codec (§4 của đề).
+
+**E3 dùng zstd (lưu trữ) + lz4 (shuffle)** làm mặc định: một codec nén mạnh cho dữ liệu nằm lâu trên đĩa, một codec nhanh cho dữ liệu chỉ đi qua mạng một lần. Có thể đổi sau khi xem E1/E2.
+
 **Phương pháp đo.** 5 lần lặp, thứ tự xáo trộn bằng seed (để khoảng thời gian cluster chậm không luôn rơi vào cùng một codec), 1 lần khởi động mỗi app, xoá page cache trên mọi node, chạy tiếp được nếu bị ngắt.
 
-**Hạ tầng AWS.** 1 master + 3 worker `m5.xlarge` (4 vCPU, 16 GB), đĩa gp3 200 GB, Ubuntu 22.04, eu-west-3, VPC mặc định. Không dùng t3 (credit CPU cạn dần) hay gp2 (credit I/O), vì hiệu năng sẽ thay đổi trong lúc đo. Ít nhất 2 máy theo yêu cầu của thầy, để shuffle đi qua mạng thật. Dung lượng: SF 1+5+10+20 với 5 codec ≈ 88 GB trên mỗi worker (3 bản sao), cộng thêm file shuffle.
+**Hạ tầng AWS.** 1 master + 3 worker `m5.xlarge` (4 vCPU, 16 GB), đĩa gp3 200 GB, Ubuntu 22.04, eu-west-3, VPC mặc định, cả 4 máy trong **cùng một availability zone** (mạng giống nhau giữa các máy, không mất phí truyền dữ liệu giữa các zone). Không dùng t3 (credit CPU cạn dần) hay gp2 (credit I/O), vì hiệu năng sẽ thay đổi trong lúc đo. Ít nhất 2 máy theo yêu cầu của thầy, để shuffle đi qua mạng thật. Dung lượng: SF 1+5+10+20 với 5 codec ≈ 88 GB trên mỗi worker (3 bản sao), cộng thêm file shuffle.
 
 **Cài trực tiếp bằng Ansible, không dùng container trên AWS.** Không có mạng overlay xen vào số đo mạng. Thứ tự giống TP: cấu hình, rồi `start-dfs.sh`, rồi `start-master.sh` / `start-workers.sh`. Ở laptop thì dùng container (Podman Compose) vì chỉ để phát triển.
 

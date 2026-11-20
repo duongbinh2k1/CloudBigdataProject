@@ -19,7 +19,7 @@ experiment script and the plots, sysstat (`sar`).
 | `dev/` | local cluster with containers (master + 2 workers) |
 | `infra/` | Terraform (EC2) and Ansible (`cluster.yml`) |
 | `results/` | raw results |
-| `docs/` | plan, decisions, notes |
+| `docs/` | plan, decisions, notes, AWS checklist |
 
 ## Local cluster
 
@@ -34,6 +34,8 @@ make analysis           # -> analysis/figures/dev/dev/
 HDFS: http://localhost:9870, Spark: http://localhost:8080, History Server: http://localhost:18080
 
 ## AWS cluster
+
+Checklist, checks and cost: [docs/AWS.md](docs/AWS.md).
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/compression-study

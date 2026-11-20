@@ -255,7 +255,7 @@ def main(run_dir):
     sh_ratio.round(3).to_csv(tables / "ratio_shuffle.csv", index=False)
     pd.concat([sp_storage.assign(level="storage"), sp_shuffle.assign(level="shuffle")]).round(2) \
         .to_csv(tables / "speedup.csv", index=False)
-    summary = [mean_std(runs, ["app", "sf", "storage", "shuffle"], m).assign(metric=m) for m in METRICS]
+    summary = [mean_std(runs, ["app", "sf", "storage", "shuffle"], m).assign(metric=m) for m in list(METRICS) + ["shuffle_fetch_wait_ms"]]
     pd.concat(summary).round(3).to_csv(tables / "summary.csv", index=False)
     print("tables in", tables)
 
