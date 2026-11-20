@@ -21,5 +21,8 @@ gen: jar
 		$(SF) hdfs://master:9000/data none,gzip,snappy,lz4
 	$(RUN) bash -c "hdfs dfs -du -s 'hdfs://master:9000/data/sf$(SF)/*/*' > results/dev/datasets/sf$(SF).txt"
 
+experiments: jar
+	$(RUN) python3 bench/run_experiments.py bench/experiments-dev.yaml results/dev
+
 codec-bench:
 	$(RUN) bash bench/codec_bench.sh results/dev/codec_bench

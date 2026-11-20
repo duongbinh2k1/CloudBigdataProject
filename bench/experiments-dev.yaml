@@ -1,0 +1,21 @@
+# Small test on the local cluster
+name: dev
+seed: 1
+repetitions: 1
+sizes: [0.1]
+apps: [io_bound, cpu_bound, balanced]
+
+storage_codecs: [none, gzip, snappy, lz4]      # E1 (no zstd: needs Hadoop native lib, only on EC2)
+shuffle_codecs: ["off", lz4, snappy, zstd]     # E2 (no gzip for shuffle in Spark)
+combined: {storage: gzip, shuffle: lz4}        # E3
+
+rounds: {cpu_bound: 64, balanced: 8}
+
+nodes: [master]
+use_ssh: false
+
+spark_conf:
+  spark.default.parallelism: 8
+  spark.executor.memory: 512m
+  spark.executor.cores: 2
+  spark.driver.memory: 512m
