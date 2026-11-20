@@ -1,9 +1,8 @@
 # Local cluster (Podman). With Docker: make up DC="docker compose -f dev/compose.yml"
 DC = podman compose -f dev/compose.yml
-RUN = $(DC) exec -w /opt/work master
-SF ?= 0.1
+RESULTS ?= results/dev/dev
 
-.PHONY: up down shell jar gen experiments codec-bench analysis
+.PHONY: up down shell run analysis
 
 up:
 	$(DC) up -d --build
@@ -14,20 +13,10 @@ down:
 shell:
 	$(DC) exec master bash
 
-jar:
-	$(RUN) bash java/build.sh
+# the same script as on AWS, run in the master container
+run:
+	$(DC) exec master bash bench/run_all.sh dev
 
-# make gen SF=1   (zstd only works on the EC2 cluster)
-gen: jar
-	$(RUN) spark-submit --class compression.datagen.Generator java/build/cloud-bigdata-project.jar \
-		$(SF) hdfs://master:9000/data none,gzip,snappy,lz4
-	$(RUN) bash -c "hdfs dfs -du -s 'hdfs://master:9000/data/sf$(SF)/*/*' > results/dev/datasets/sf$(SF).txt"
-
-experiments: jar
-	$(RUN) python3 bench/run_experiments.py bench/experiments-dev.yaml results/dev
-
-codec-bench:
-	$(RUN) bash bench/codec_bench.sh results/dev/codec_bench
-
+# on the laptop: make analysis, or make analysis RESULTS=results/aws/aws
 analysis:
-	.venv/bin/python analysis/report.py results/dev/dev
+	.venv/bin/python analysis/report.py $(RESULTS)

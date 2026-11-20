@@ -21,13 +21,19 @@ experiment script and the plots, sysstat (`sar`).
 | `results/` | raw results |
 | `docs/` | plan, decisions, notes, AWS checklist |
 
+## How to run
+
+The same script runs everything on the master node: `bench/run_all.sh dev` on the local cluster,
+`bench/run_all.sh aws` on EC2. It builds the jar, generates the datasets, runs the codec
+micro-benchmark and the experiments of `bench/experiments-<env>.yaml` (steps already done are skipped).
+The figures are made on the laptop with `analysis/report.py`.
+
 ## Local cluster
 
 ```bash
-make up                 # build the image and start the containers
-make gen SF=0.1         # dataset
-make experiments        # bench/experiments-dev.yaml -> results/dev/dev/runs.csv
-python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt
+make up                 # build the image and start master + 2 workers
+make run                # bench/run_all.sh dev  -> results/dev/
+python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt    # once
 make analysis           # -> analysis/figures/dev/dev/
 ```
 
@@ -49,13 +55,7 @@ ssh -i ~/.ssh/cloud-bigdata-project ubuntu@$(terraform -chdir=../terraform outpu
 On the master:
 
 ```bash
-cd /opt/work && mkdir -p results/aws/datasets
-for sf in 1 5 10 20; do
-  spark-submit --class compression.datagen.Generator java/build/cloud-bigdata-project.jar $sf hdfs://master:9000/data none,gzip,snappy,lz4,zstd
-  hdfs dfs -du -s "hdfs://master:9000/data/sf$sf/*/*" > results/aws/datasets/sf$sf.txt
-done
-bash bench/codec_bench.sh results/aws/codec_bench
-tmux new -s exp "python3 bench/run_experiments.py bench/experiments-aws.yaml results/aws"   # Ctrl-b d to leave it running
+cd /opt/work && tmux new -s exp "bash bench/run_all.sh aws"    # Ctrl-b d to leave it running, tmux attach -t exp to come back
 ```
 
 Web UIs from the laptop: `ssh -i ~/.ssh/cloud-bigdata-project -L 8080:master:8080 -L 18080:master:18080 -L 9870:master:9870 ubuntu@<master ip>`
@@ -65,5 +65,5 @@ At the end, copy the results and delete the cluster:
 ```bash
 rsync -az -e "ssh -i ~/.ssh/cloud-bigdata-project" ubuntu@<master ip>:/opt/work/results/aws/ results/aws/
 cd infra/terraform && terraform destroy
-.venv/bin/python analysis/report.py results/aws/aws
+cd ../.. && make analysis RESULTS=results/aws/aws
 ```

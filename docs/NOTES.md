@@ -15,7 +15,7 @@
 
 `orders` 1 500 000 dòng, `lineitem` 5 998 152 dòng, 10 file mỗi bảng.
 
-## Micro-benchmark codec (`make codec-bench`, trung vị 5 lần, 20/11)
+## Micro-benchmark codec (trung vị 5 lần, 20/11)
 
 Một file `lineitem` (75 MB text) và 64 MB byte ngẫu nhiên, trên một container. MB = 10⁶ byte.
 
@@ -45,7 +45,7 @@ Một file `lineitem` (75 MB text) và 64 MB byte ngẫu nhiên, trên một con
 
 `cpu_ratio` = thời gian CPU / thời gian chạy của task. MB di chuyển = input + shuffle đọc + shuffle ghi + output.
 Với 32 vòng SHA-256, `cpu_bound` (20) và `balanced` (31) quá gần nhau, nên tăng `cpu_bound` lên 64 vòng.
-Ở SF 0.1 (`make experiments`, bảng `workload_characterisation.csv`), thứ tự vẫn giữ nguyên: 74 / 21 / 9 MB/giây CPU.
+Ở SF 0.1 (`make run`, bảng `workload_characterisation.csv`), thứ tự vẫn giữ nguyên: 74 / 21 / 9 MB/giây CPU.
 
 ## Điểm cần nêu trong báo cáo
 

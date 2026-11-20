@@ -29,11 +29,10 @@ Các lệnh đầy đủ ở [README](../README.md#aws-cluster). File này là d
 
 ## 3. Chạy
 
-1. Sinh dữ liệu SF 1, 5, 10, 20 với 5 codec (vòng `for` trong README), lưu kích thước vào `results/aws/datasets/`.
-2. `bash bench/codec_bench.sh results/aws/codec_bench`.
-3. Thử nhanh trước khi chạy hết: `python3 bench/run_experiments.py bench/experiments-aws.yaml results/aws --limit 3`, rồi xem `results/aws/aws/runs.csv` (cột `status` = `ok`, `disk_read_bytes` > 0 nghĩa là xoá cache có tác dụng).
-4. Chạy toàn bộ trong `tmux` (lệnh trong README). Xem tiến độ: `tmux attach -t exp`, hoặc `grep -c ',ok,' results/aws/aws/runs.csv`. Nếu bị ngắt, chạy lại đúng lệnh đó: các lần đã `ok` được bỏ qua.
-5. (Tuỳ chọn) Sau khi xem kết quả E1/E2, đổi `combined` trong `experiments-aws.yaml` rồi chạy lại: chỉ các cấu hình mới được chạy thêm.
+1. Chạy toàn bộ: `cd /opt/work && tmux new -s exp "bash bench/run_all.sh aws"` (cùng script với `make run` ở local). Script lần lượt build jar, sinh dữ liệu SF 1, 5, 10, 20 (5 codec), chạy micro-benchmark, rồi 540 lần thí nghiệm.
+2. Sau vài lần đo đầu tiên, xem `results/aws/aws/runs.csv`: cột `status` = `ok`, `disk_read_bytes` > 0 (xoá cache có tác dụng). Nếu sai, dừng lại (`tmux attach -t exp`, `Ctrl-c`) và sửa trước khi để chạy tiếp.
+3. Xem tiến độ: `tmux attach -t exp` (thoát mà không dừng: `Ctrl-b` rồi `d`), hoặc `grep -c ',ok,' results/aws/aws/runs.csv`. Nếu bị ngắt, chạy lại đúng lệnh ở bước 1: bước nào xong rồi thì được bỏ qua.
+4. (Tuỳ chọn) Sau khi xem kết quả E1/E2, đổi `combined` trong `experiments-aws.yaml` rồi chạy lại: chỉ các cấu hình mới được chạy thêm.
 
 ## 4. Kết thúc
 
