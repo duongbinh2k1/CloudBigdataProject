@@ -3,6 +3,8 @@ DC = podman compose -f dev/compose.yml
 RUN = $(DC) exec -w /opt/work master
 SF ?= 0.1
 
+.PHONY: up down shell jar gen experiments codec-bench analysis
+
 up:
 	$(DC) up -d --build
 
