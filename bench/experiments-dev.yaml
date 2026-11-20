@@ -1,5 +1,4 @@
 # Small test on the local cluster
-name: dev
 seed: 1
 repetitions: 1
 sizes: [0.1]

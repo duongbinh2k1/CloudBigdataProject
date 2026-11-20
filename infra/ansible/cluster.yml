@@ -1,6 +1,14 @@
 ---
 # Install and start HDFS + Spark on the EC2 nodes: ansible-playbook cluster.yml
 # master: NameNode, Spark Master, History Server / workers: DataNode, Spark Worker
+- name: Wait until the new machines accept SSH
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
 - name: Every node
   hosts: all
   become: true

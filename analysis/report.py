@@ -1,6 +1,6 @@
 """Figures and tables of the report.
 
-    .venv/bin/python analysis/report.py results/aws/aws
+    .venv/bin/python analysis/report.py results/aws
 
 E1 = runs with shuffle off, E2 = runs with storage none, E3 = C0..C3 of `combined` in config.yaml.
 """
@@ -203,10 +203,9 @@ def tradeoff_fig(raw):
     return fig, summary
 
 
-def main(run_dir):
-    run_dir = Path(run_dir)
-    env_dir = run_dir.parent
-    out = Path(__file__).parent / "figures" / env_dir.name / run_dir.name
+def main(results):
+    run_dir = env_dir = Path(results)          # results/dev or results/aws
+    out = Path(__file__).parent / "figures" / env_dir.name
     tables = out / "tables"
     tables.mkdir(parents=True, exist_ok=True)
     config = yaml.safe_load((run_dir / "config.yaml").read_text())

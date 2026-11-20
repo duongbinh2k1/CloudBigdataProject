@@ -1,4 +1,4 @@
-"""Runs the experiments of a YAML file and writes one line per run in <results>/<name>/runs.csv.
+"""Runs the experiments of a YAML file and writes one line per run in <results>/runs.csv.
 
     python3 bench/run_experiments.py bench/experiments-dev.yaml results/dev
 
@@ -118,7 +118,7 @@ def main():
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
-    out_dir = args.results / cfg["name"]
+    out_dir = args.results
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "config.yaml").write_text(args.config.read_text())     
     runs_csv = out_dir / "runs.csv"

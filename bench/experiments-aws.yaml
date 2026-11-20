@@ -1,5 +1,4 @@
 # Experiments on the EC2 cluster (1 master + 3 workers m5.xlarge)
-name: aws
 seed: 20261111
 repetitions: 5
 sizes: [1, 5, 10, 20]

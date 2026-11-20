@@ -53,7 +53,7 @@ workerN : DataNode + Spark Worker
 
 ## 6. Đồ thị và bảng (§6) — `analysis/report.py`
 
-Kết quả ở `analysis/figures/<env>/<name>/`, mỗi đồ thị có bản PNG và PDF, error bar = độ lệch chuẩn qua 5 lần lặp.
+Kết quả ở `analysis/figures/<env>/`, mỗi đồ thị có bản PNG và PDF, error bar = độ lệch chuẩn qua 5 lần lặp.
 
 | Đề yêu cầu | File |
 |---|---|
@@ -96,7 +96,7 @@ Bảng (`tables/`): `summary.csv` (trung bình, độ lệch chuẩn của mọi
 |---|---|
 | Page cache che mất I/O đĩa | xoá cache trước mỗi lần chạy |
 | Kết quả dao động | 5 lần lặp, error bar, thứ tự xáo trộn |
-| Hết tiền AWS (~1 USD/giờ khi bật) | Budget Alert, chỉ bật cluster khi chạy, `terraform destroy` khi xong |
+| Hết tiền AWS (~1 USD/giờ khi bật) | Budget Alert, chỉ bật cluster khi chạy, `make down ENV=aws` khi xong |
 | Quota vCPU thấp (cần 16) | xin tăng quota sớm |
 | Đầy đĩa | 200 GB/node, output xoá ngay sau mỗi lần đo |
 | zstd lưu trữ không chạy trên EC2 | kiểm tra ngay sau khi dựng cluster (AWS.md); nếu không được thì bỏ zstd ở mức lưu trữ và nêu trong báo cáo |
