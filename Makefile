@@ -19,7 +19,7 @@ jar:
 
 # make gen SF=1   (zstd only works on the EC2 cluster)
 gen: jar
-	$(RUN) spark-submit --class compression.datagen.Generator java/build/compression-study.jar \
+	$(RUN) spark-submit --class compression.datagen.Generator java/build/cloud-bigdata-project.jar \
 		$(SF) hdfs://master:9000/data none,gzip,snappy,lz4
 	$(RUN) bash -c "hdfs dfs -du -s 'hdfs://master:9000/data/sf$(SF)/*/*' > results/dev/datasets/sf$(SF).txt"
 

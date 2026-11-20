@@ -19,7 +19,7 @@ data "aws_vpc" "default" {
 
 # SSH only from my IP; all traffic between the nodes of the cluster (HDFS, Spark, shuffle).
 resource "aws_security_group" "cluster" {
-  name   = "compression-study"
+  name   = "cloud-bigdata-project"
   vpc_id = data.aws_vpc.default.id
 
   ingress {
@@ -43,8 +43,8 @@ resource "aws_security_group" "cluster" {
 }
 
 resource "aws_key_pair" "key" {
-  key_name   = "compression-study"
-  public_key = file(pathexpand("~/.ssh/compression-study.pub"))
+  key_name   = "cloud-bigdata-project"
+  public_key = file(pathexpand("~/.ssh/cloud-bigdata-project.pub"))
 }
 
 resource "aws_instance" "node" {
@@ -60,7 +60,7 @@ resource "aws_instance" "node" {
     volume_size = var.disk_gb
   }
 
-  tags = { Name = "compression-study-${each.key}" }
+  tags = { Name = "cloud-bigdata-project-${each.key}" }
 }
 
 # Ansible inventory: public IP to connect, private IP for /etc/hosts.
@@ -77,7 +77,7 @@ resource "local_file" "inventory" {
 
     [all:vars]
     ansible_user=ubuntu
-    ansible_ssh_private_key_file=~/.ssh/compression-study
+    ansible_ssh_private_key_file=~/.ssh/cloud-bigdata-project
   EOT
 }
 

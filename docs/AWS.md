@@ -8,7 +8,7 @@ Các lệnh đầy đủ ở [README](../README.md#aws-cluster). File này là d
 - [ ] **Quota vCPU**: 4 × m5.xlarge = 16 vCPU. Kiểm tra *Service Quotas → EC2 → Running On-Demand Standard instances* ở vùng eu-west-3. Tài khoản mới thường chỉ có 5 hoặc 8 vCPU → xin tăng sớm (có thể mất 1–2 ngày).
 - [ ] `aws configure` (access key của một user IAM, vùng `eu-west-3`).
 - [ ] Cài công cụ trên laptop: `brew install terraform ansible` (gói `ansible` có sẵn collection `ansible.posix` mà playbook cần).
-- [ ] Khoá SSH: `ssh-keygen -t ed25519 -f ~/.ssh/compression-study`.
+- [ ] Khoá SSH: `ssh-keygen -t ed25519 -f ~/.ssh/cloud-bigdata-project`.
 - [ ] `infra/terraform/terraform.tfvars` với IP của mình (`curl -s https://checkip.amazonaws.com`, thêm `/32`). Nếu IP nhà thay đổi, sửa file này rồi `terraform apply` lại.
 
 ## 2. Dựng cluster
@@ -20,8 +20,8 @@ Các lệnh đầy đủ ở [README](../README.md#aws-cluster). File này là d
    - http://localhost:8080 (qua tunnel SSH) → 3 worker;
    - **zstd lưu trữ chạy được với Spark**:
      ```bash
-     spark-submit --class compression.datagen.Generator java/build/compression-study.jar 0.01 hdfs://master:9000/smoke zstd
-     spark-submit --class compression.apps.IoBound java/build/compression-study.jar \
+     spark-submit --class compression.datagen.Generator java/build/cloud-bigdata-project.jar 0.01 hdfs://master:9000/smoke zstd
+     spark-submit --class compression.apps.IoBound java/build/cloud-bigdata-project.jar \
          hdfs://master:9000/smoke/sf0.01/zstd/lineitem hdfs://master:9000/smoke/out zstd
      hdfs dfs -ls hdfs://master:9000/smoke/out      # part-*.zst
      ```

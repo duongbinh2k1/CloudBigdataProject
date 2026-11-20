@@ -15,7 +15,7 @@ import yaml
 
 import metrics
 
-JAR = "java/build/compression-study.jar"
+JAR = "java/build/cloud-bigdata-project.jar"
 DATA = "hdfs://master:9000/data"
 OUTPUT = "hdfs://master:9000/results"
 HISTORY = "http://master:18080"
