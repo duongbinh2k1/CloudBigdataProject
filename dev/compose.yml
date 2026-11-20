@@ -1,0 +1,30 @@
+# Local cluster for development: 1 master + 2 workers (not for measurements)
+name: compression-dev
+
+services:
+  master:
+    build: .
+    image: compression-study/node:dev
+    hostname: master
+    environment: {ROLE: master}
+    volumes: [..:/opt/work, master-data:/data]
+    ports: ["9870:9870", "8080:8080", "18080:18080", "4040:4040"]
+
+  worker1:
+    image: compression-study/node:dev
+    hostname: worker1
+    environment: {ROLE: worker}
+    volumes: [..:/opt/work, worker1-data:/data]
+    depends_on: [master]
+
+  worker2:
+    image: compression-study/node:dev
+    hostname: worker2
+    environment: {ROLE: worker}
+    volumes: [..:/opt/work, worker2-data:/data]
+    depends_on: [master]
+
+volumes:
+  master-data:
+  worker1-data:
+  worker2-data:
