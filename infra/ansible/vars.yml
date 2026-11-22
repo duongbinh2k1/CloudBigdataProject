@@ -7,5 +7,5 @@ java_home: /usr/lib/jvm/java-11-openjdk-amd64
 # Read from the machines (all nodes have the same instance type), so that only
 # infra/terraform/variables.tf changes when the machines change. Used in templates/.
 workers: "{{ groups['workers'] | length }}"
-cores: "{{ hostvars['worker1'].ansible_processor_vcpus }}"
-ram_gb: "{{ hostvars['worker1'].ansible_memtotal_mb // 1024 }}"
+cores: "{{ hostvars['worker1'].ansible_facts.processor_vcpus }}"
+ram_gb: "{{ hostvars['worker1'].ansible_facts.memtotal_mb // 1024 }}"
