@@ -29,4 +29,7 @@ infra/ansible/inventory.ini
 # Results and figures of the test runs on the local cluster (not for the report)
 results/dev/
 analysis/figures/dev/
+# Test run on the Free plan machines (m7i-flex.large, SF 1, 1 repetition): not for the report
+results/aws-test/
+analysis/figures/aws-test/
 java/build/

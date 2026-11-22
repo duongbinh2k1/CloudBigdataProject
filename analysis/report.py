@@ -143,7 +143,8 @@ def compression_ratio_fig(st_ratio, sh_ratio, codecs):
     grouped_bars(right, sh_ratio, "app", apps_in(sh_ratio), shuffle_codecs, "ratio")
     right.set_title("Shuffle (data written by map tasks)")
     right.set_ylabel("Compression ratio (off / compressed)")
-    right.legend()
+    right.set_ylim(0, right.get_ylim()[1] * 1.2)          # room for the legend above the bars
+    right.legend(loc="upper center", ncol=len(shuffle_codecs))
     fig.tight_layout()
     return fig
 

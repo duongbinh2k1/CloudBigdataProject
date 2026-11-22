@@ -55,7 +55,7 @@ Thêm kích thước, codec hay số lần lặp thì chỉ các lần chạy m�
 | `instance_type` (`infra/terraform/variables.tf`) | `m7i-flex.large` (2 vCPU, 8 GB, có trong Free plan) | `m5.xlarge` (4 vCPU, 16 GB) |
 | `sizes`, `repetitions` (`bench/experiments-aws.yaml`) | `[1]`, `1` → 27 lần chạy | `[1, 5, 10, 20]`, `5` → 540 lần chạy |
 
-Hai chỗ đổi đều có ghi chú `TEMPORARY` trong file. Máy "flex" không đảm bảo luôn có 100% CPU, nên số đo trên cluster test không dùng cho báo cáo. Giữa hai giai đoạn: `make down ENV=aws`, sửa hai file, rồi `make up ENV=aws` và `make run ENV=aws` lại từ đầu (dữ liệu và kết quả trên cluster cũ bị xoá theo).
+Hai chỗ đổi đều có ghi chú `TEMPORARY` trong file. Kết quả của bản test đã chạy được giữ ở `results/aws-test/` (không đưa lên git) để không trộn với kết quả chính thức trong `results/aws/`. Máy "flex" không đảm bảo luôn có 100% CPU, nên số đo trên cluster test không dùng cho báo cáo. Giữa hai giai đoạn: `make down ENV=aws`, sửa hai file, rồi `make up ENV=aws` và `make run ENV=aws` lại từ đầu (dữ liệu và kết quả trên cluster cũ bị xoá theo).
 
 ## Chi phí (ước tính, kiểm tra lại trên trang giá EC2 cho vùng Sydney)
 

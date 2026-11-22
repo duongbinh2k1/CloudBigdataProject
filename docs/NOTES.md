@@ -47,6 +47,20 @@ Một file `lineitem` (75 MB text) và 64 MB byte ngẫu nhiên, trên một con
 Với 32 vòng SHA-256, `cpu_bound` (20) và `balanced` (31) quá gần nhau, nên tăng `cpu_bound` lên 64 vòng.
 Ở SF 0.1 (`make run`, bảng `workload_characterisation.csv`), thứ tự vẫn giữ nguyên: 74 / 21 / 9 MB/giây CPU.
 
+## Chạy test trên AWS (22/11, `results/aws-test/`, không dùng cho báo cáo)
+
+4 × `m7i-flex.large` (2 vCPU, 8 GB) ở Sydney, SF 1, 1 lần mỗi cấu hình, 27/27 lần chạy `ok`. Máy "flex" và 1 lần lặp: chỉ để kiểm tra cả quy trình.
+
+- **Cả quy trình chạy được trên EC2**: Terraform + Ansible (~12 phút), sinh dữ liệu, micro-benchmark, 27 lần đo, `make fetch`, `make down`.
+- **zstd lưu trữ chạy được**: Spark (client Hadoop 3.3.4) ghi và đọc file `.zst` bằng thư viện native của Hadoop 3.4.1.
+- Cấu hình Spark tự tính đúng: executor 2 core / 3 GB, driver 1 GB, `parallelism` 24 (cột trong `runs.csv`).
+- Xoá cache có tác dụng: `disk_read_bytes` > 0 ở mọi lần chạy.
+- Tỉ lệ nén lưu trữ (SF 1): gzip 3,30×, zstd 3,17×, snappy 2,05×, lz4 1,95×. Shuffle: zstd ~3,3×, lz4 ~2,0–2,4×, snappy ~2,1–2,4×.
+- Quan sát cần xác nhận bằng đợt chính thức (5 lần lặp, `m5.xlarge`):
+  - nén shuffle làm `balanced` nhanh hơn ~17% (43 s → 36 s) và **giảm** tổng CPU (156 s → 114 s); không có spill, GC như nhau. Giả thuyết: ghi/đọc 2,4 lần ít byte shuffle hơn tốn ít CPU hệ điều hành hơn chi phí nén LZ4;
+  - nén lưu trữ gần như không giúp `io_bound` ở SF 1; gzip làm chậm 23%, zstd chậm 7%;
+  - `cpu_bound` thay đổi < 6% với mọi cấu hình.
+
 ## Điểm cần nêu trong báo cáo
 
 - `sortByKey` chạy thêm một job lấy mẫu đọc toàn bộ input để chia khoảng, nên `io_bound` đọc input **hai lần**.
