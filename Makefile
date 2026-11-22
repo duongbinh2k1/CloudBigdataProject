@@ -31,7 +31,7 @@ run: cluster-ip
 	@echo "started on the master. Follow with: make status ENV=aws"
 
 status: cluster-ip
-	$(SSH) "tmux ls; tail -n 5 /opt/work/results/aws/run.log; echo runs ok: \$$(grep -c ',ok,' /opt/work/results/aws/runs.csv)"
+	@$(SSH) "tmux ls 2>/dev/null || echo 'not running'; grep -E '^(built|written|dataset|warm-up|\[[0-9]+/[0-9]+\])| done$$|Exception' /opt/work/results/aws/run.log | tail -n 8; echo runs ok: \$$(grep -c ',ok,' /opt/work/results/aws/runs.csv 2>/dev/null || echo 0)"
 
 fetch: cluster-ip
 	mkdir -p results/aws
