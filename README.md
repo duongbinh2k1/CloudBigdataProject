@@ -20,9 +20,11 @@ experiment script and the plots, sysstat (`sar`).
 | `dev/` | local cluster: Ubuntu containers installed and started with the scripts of `cluster/` (master + 2 workers) |
 | `infra/` | Terraform (EC2) and Ansible (`cluster.yml`) |
 | `results/` | raw results |
-| `docs/` | study guide (`GUIDE.md`), line-by-line walkthrough (`walkthrough/`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |
+| `docs/` | how to run (`HUONG-DAN-CHAY.md`), study guide (`GUIDE.md`), line-by-line walkthrough (`walkthrough/`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |
 
 ## How to run
+
+Step-by-step guide from an empty laptop (tools, `aws configure`, local run, AWS run, troubleshooting): [docs/HUONG-DAN-CHAY.md](docs/HUONG-DAN-CHAY.md).
 
 All commands run on the laptop. `ENV=dev` (default) is the local cluster in containers, `ENV=aws`
 the EC2 cluster. The same script, `bench/run_all.sh`, does the work on the master node in both cases:

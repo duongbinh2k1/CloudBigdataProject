@@ -1,6 +1,6 @@
 # Chạy thí nghiệm trên AWS
 
-Mọi lệnh chạy trên laptop, trong thư mục project (bảng lệnh ở [README](../README.md#how-to-run)). File này là danh sách việc cần làm và các điểm cần kiểm tra.
+Hướng dẫn đầy đủ từng bước (cài công cụ, tạo user IAM, `aws configure`…): [HUONG-DAN-CHAY.md](HUONG-DAN-CHAY.md). Mọi lệnh chạy trên laptop, trong thư mục project (bảng lệnh ở [README](../README.md#how-to-run)). File này là danh sách việc cần làm và các điểm cần kiểm tra.
 
 ## 1. Chuẩn bị (một lần)
 
