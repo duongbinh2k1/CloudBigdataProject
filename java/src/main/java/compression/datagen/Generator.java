@@ -8,10 +8,9 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-// Generates orders and lineitem for a scale factor (SF 1 = about 1 GB) and writes one copy per codec
-// in <base>/sf<SF>/<codec>/. Each partition = 150,000 orders = one file (lineitem ~85 MB < one
-// 128 MB HDFS block), because compressed text files cannot be split: like this every codec has
-// the same number of tasks.
+// Generates orders and lineitem (SF 1 = about 1 GB), one copy per codec in <base>/sf<SF>/<codec>/.
+// 150,000 orders per file (< one HDFS block): compressed files cannot be split, so every codec
+// gets the same number of tasks.
 // spark-submit --class compression.datagen.Generator app.jar <sf> <base dir> <codec,codec,...>
 public class Generator {
 

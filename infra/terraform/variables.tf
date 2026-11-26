@@ -1,6 +1,5 @@
 variable "region" {
-  # Sydney: the only region allowed on this account's Free plan (Singapore, ap-southeast-1,
-  # is closer to Vietnam: use it if the account allows it, e.g. after upgrading the plan)
+  # the only region allowed on this Free plan account (Singapore would be closer)
   default = "ap-southeast-2"
 }
 

@@ -1,19 +1,12 @@
-# Every command runs on the laptop. ENV=dev (default): local cluster in containers.
-# ENV=aws: EC2 cluster. Same commands for both:
-#   make up         start the cluster
-#   make run        whole study (bench/run_all.sh on the master)
-#   make status     progress
-#   make fetch      copy the results to the laptop
-#   make analysis   figures and tables -> analysis/figures/<env>/
-#   make shell      shell on the master
-#   make down       stop the cluster (aws: delete it)
+# make up | run | status | fetch | analysis | shell | down    (local cluster)
+# the same with ENV=aws                                      (EC2 cluster)
 ENV ?= dev
 
 DC = podman compose -f dev/compose.yml
 KEY = $(HOME)/.ssh/cloud-bigdata-project
 MASTER_IP = $(shell terraform -chdir=infra/terraform output -raw master_public_ip 2>/dev/null)
 SSH = ssh -i $(KEY) -o StrictHostKeyChecking=accept-new ubuntu@$(MASTER_IP)
-# Terraform with my current public IP (the only address allowed to SSH into the nodes)
+# only my current IP can SSH into the EC2 nodes
 TF = TF_VAR_my_ip_cidr=$$(curl -s https://checkip.amazonaws.com)/32 terraform -chdir=infra/terraform
 
 .PHONY: up run status fetch analysis shell down cluster-ip
@@ -25,7 +18,7 @@ up: $(KEY)
 	$(TF) apply
 	cd infra/ansible && ansible-playbook cluster.yml
 
-# in tmux on the master, so it keeps running when the laptop is off
+# in tmux: keeps running when the laptop is off
 run: cluster-ip
 	$(SSH) "tmux new -d -s exp 'bash -lc \"cd /opt/work && mkdir -p results/aws && bash bench/run_all.sh aws 2>&1 | tee -a results/aws/run.log\"'"
 	@echo "started on the master. Follow with: make status ENV=aws"
@@ -56,7 +49,7 @@ up:
 	$(DC) up -d --build
 
 run:
-	$(DC) exec master bash bench/run_all.sh dev
+	$(DC) exec master bash -l bench/run_all.sh dev
 
 status:
 	@echo "runs ok: $$(grep -c ',ok,' results/dev/runs.csv 2>/dev/null || echo 0)"
@@ -65,7 +58,7 @@ fetch:
 	@echo "nothing to do: the local cluster writes directly to results/dev"
 
 shell:
-	$(DC) exec master bash
+	$(DC) exec master bash -l
 
 down:
 	$(DC) down
@@ -75,7 +68,6 @@ endif
 analysis: .venv/bin/python
 	.venv/bin/python analysis/report.py results/$(ENV)
 
-# Python environment for the figures, created once
 .venv/bin/python:
 	/usr/bin/python3 -m venv .venv
 	.venv/bin/pip install -q -r analysis/requirements.txt

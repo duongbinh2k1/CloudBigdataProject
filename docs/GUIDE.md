@@ -118,7 +118,7 @@ Laptop ── Podman ── container master  (NameNode, Spark Master, History S
          thư mục project được gắn vào /opt/work của mỗi container
 ```
 
-Mỗi container đóng vai **một máy Ubuntu**, cài giống hệt máy EC2: `apt` (Java, SSH, sysstat), giải nén Hadoop/Spark, cùng file cấu hình trong `conf/`, SSH không mật khẩu giữa các máy. Master khởi động cả cluster qua SSH bằng `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, đúng như trên EC2 và như slide.
+Mỗi container đóng vai **một máy Ubuntu 22.04**, được cài bằng **đúng script cài đặt của máy EC2** (`cluster/install.sh`), và master khởi động cả cluster bằng **đúng script khởi động của EC2** (`cluster/start-cluster.sh`: `start-dfs.sh`, `start-master.sh`, `start-workers.sh` qua SSH, như slide). Cái gì chạy được ở local thì chạy y nguyên trên cloud.
 
 Cùng phần mềm (Java 11, Hadoop 3.4.1, Spark 3.5.5), cùng code, cùng script. Khác: kích thước nhỏ (SF 0.1), không có zstd ở mức lưu trữ (Mac là ARM, thư viện native của Hadoop chỉ có cho x86_64), và 3 container dùng chung một máy nên số đo không có ý nghĩa.
 
@@ -142,7 +142,10 @@ bench/                      chạy thí nghiệm
   CodecBench.java, codec_bench.sh   micro-benchmark codec
   experiments-dev.yaml, experiments-aws.yaml   thiết kế thí nghiệm
 analysis/report.py          đồ thị + bảng
-conf/                       file cấu hình Hadoop + Spark, dùng chung cho cluster local và EC2
+cluster/                    dùng chung cho cluster local và EC2:
+  install.sh                  cài Java, Hadoop, Spark + cấu hình trên một máy Ubuntu
+  start-cluster.sh            khởi động HDFS + Spark từ master (start-dfs.sh, start-workers.sh…)
+  hadoop/, spark/             file cấu hình
 dev/                        cluster local (Dockerfile, compose.yml, entrypoint.sh, workers)
 infra/terraform/            tạo máy EC2
 infra/ansible/              cài và khởi động HDFS + Spark
@@ -163,10 +166,10 @@ make up ENV=aws
  ├─ Terraform: tạo 4 máy EC2 + security group + key pair (với IP hiện tại của laptop)
  │             → ghi infra/ansible/inventory.ini (tên máy, IP public, IP private)
  └─ Ansible (cluster.yml):
-      chờ SSH → cài Java, sysstat, libzstd → tải Hadoop + Spark
-      → copy file cấu hình conf/ + file workers → kiểm tra zstd (checknative)
-      → SSH không mật khẩu từ master → format NameNode → start-dfs.sh
-      → start-master.sh, start-workers.sh, start-history-server.sh
+      chờ SSH → tên máy, /etc/hosts → cluster/install.sh trên mọi máy (Java, Hadoop, Spark, cấu hình)
+      → file workers → SSH không mật khẩu từ master
+      → cluster/start-cluster.sh trên master (format NameNode, start-dfs.sh,
+        start-master.sh, start-workers.sh, start-history-server.sh)
       → copy java/ và bench/ lên /opt/work → build jar
 
 make run ENV=aws
@@ -191,7 +194,7 @@ make down ENV=aws       terraform destroy (xoá hết, ngừng tính tiền)
 | Muốn đổi | Sửa | Ai đọc |
 |---|---|---|
 | Loại máy, số worker, đĩa, vùng | `infra/terraform/variables.tf` | Terraform |
-| Hadoop, Spark (dùng chung local và EC2) | `conf/hadoop/`, `conf/spark/` | NameNode, DataNode, Spark Master/Worker, `spark-submit` |
+| Cài đặt, cấu hình, khởi động Hadoop/Spark (dùng chung local và EC2) | `cluster/` | `install.sh`, `start-cluster.sh`; NameNode, DataNode, Spark Master/Worker, `spark-submit` |
 | Thí nghiệm (kích thước, codec, số lần lặp, app, rounds) | `bench/experiments-<env>.yaml` | `run_all.sh`, `run_experiments.py`, `report.py` |
 
 ---
@@ -465,9 +468,9 @@ Công thức:
 ### 5.8 Hạ tầng
 
 **Cluster local (`dev/`)**: mô phỏng các máy EC2 bằng container.
-- `Dockerfile`: `FROM ubuntu:22.04` (như TP container của môn), `apt-get install` Java 11, SSH, sysstat, PyYAML; tải và giải nén Hadoop 3.4.1, Spark 3.5.5; khoá SSH chung cho mọi container (SSH không mật khẩu); copy `conf/` và `dev/workers`. Daemon chạy bằng `root` trong container (trên EC2 là `ubuntu`).
+- `Dockerfile`: `FROM ubuntu:22.04` (như TP container của môn), rồi `RUN bash cluster/install.sh`, **cùng script với EC2**. Phần riêng của container: khoá SSH chung cho mọi container (SSH không mật khẩu), file `dev/workers`, daemon chạy bằng `root` (trên EC2 là `ubuntu`).
 - `compose.yml`: 3 container (master, worker1, worker2), mỗi container một volume cho dữ liệu HDFS, thư mục project gắn vào `/opt/work`.
-- `entrypoint.sh`: mọi container bật SSH server; master chờ SSH của các worker, format NameNode lần đầu, rồi `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, `start-history-server.sh`.
+- `entrypoint.sh`: mọi container bật SSH server; master chờ SSH của các worker rồi chạy `cluster/start-cluster.sh`, **cùng script với EC2**.
 
 **Terraform (`infra/terraform/`)**: tạo hạ tầng trên AWS bằng code.
 - `data "aws_ami"`: tìm image Ubuntu 22.04 x86_64 mới nhất của Canonical.
@@ -478,13 +481,17 @@ Công thức:
 - `local_file`: ghi `inventory.ini` cho Ansible (IP public để kết nối, IP private cho `/etc/hosts`).
 - `variables.tf`: vùng, loại máy, số worker, dung lượng đĩa.
 
-**Ansible (`infra/ansible/cluster.yml`)**: cài đặt, theo đúng trình tự của TP:
+**Ansible (`infra/ansible/cluster.yml`)**: đưa hai script dùng chung lên các máy và chạy chúng (như TP Ansible: viết lệnh cài vào một file shell rồi dùng playbook chạy trên các máy), cộng thêm những gì riêng của máy thật:
 1. Chờ các máy nhận SSH.
-2. Mọi máy: đặt hostname, `/etc/hosts` (IP private của mọi node), tắt cập nhật tự động (tránh nhiễu khi đo), cài gói, tải và giải nén Hadoop + Spark, biến môi trường, **copy file cấu hình `conf/`**, file `workers`, thư mục dữ liệu, kiểm tra `hadoop checknative` báo `zstd: true`.
+2. Mọi máy: đặt hostname, `/etc/hosts` (IP private của mọi node), tắt cập nhật tự động (tránh nhiễu khi đo), copy thư mục `cluster/` và chạy **`install.sh ubuntu`**, ghi file `workers`.
 3. SSH không mật khẩu từ master đến mọi máy (`start-dfs.sh`, `start-workers.sh` và script thí nghiệm cần).
-4. Trên master: format NameNode (lần đầu), `start-dfs.sh`, chờ HDFS ra khỏi safe mode, tạo thư mục HDFS, `start-master.sh` + `start-workers.sh` + `start-history-server.sh`, copy code, build jar.
+4. Trên master: chạy **`start-cluster.sh`**, copy code, build jar.
 
-**File cấu hình (`conf/`, dùng chung local và EC2)**: chỉ những gì cần để chạy được, mọi thứ khác là mặc định của Hadoop/Spark (như slide: "not much things to edit in each file").
+**`cluster/install.sh`** (chạy bằng root, tham số là user chạy daemon): `apt-get install` Java 11, PyYAML, sysstat, libzstd, SSH; tải và giải nén Hadoop 3.4.1, Spark 3.5.5 vào `/opt` (chỉ lần đầu), link `/opt/hadoop`, `/opt/spark`; biến môi trường trong `/etc/profile.d/bigdata.sh`; copy cấu hình; tạo `/data/hdfs`, `/opt/work`.
+
+**`cluster/start-cluster.sh`** (chạy trên master): format NameNode lần đầu, `start-dfs.sh`, chờ HDFS ra khỏi safe mode, tạo thư mục HDFS, `start-master.sh`, `start-workers.sh`, `start-history-server.sh` (dừng trước nếu đang chạy, nên chạy lại được).
+
+**File cấu hình (`cluster/hadoop/`, `cluster/spark/`, dùng chung local và EC2)**: chỉ những gì cần để chạy được, mọi thứ khác là mặc định của Hadoop/Spark (như slide: "not much things to edit in each file").
 
 | File | Nội dung | Vì sao cần |
 |---|---|---|
@@ -582,4 +589,4 @@ Các nhận định dưới đây là **giả thuyết** dựa trên lý thuyế
 | Một app chạy tay | `spark-submit --class compression.apps.IoBound java/build/cloud-bigdata-project.jar hdfs://master:9000/data/sf0.1/lz4/lineitem hdfs://master:9000/results/demo lz4` |
 | Số đo của một lần chạy | History Server http://localhost:18080 → app → Stages (Shuffle Write, Input) |
 | Kết quả, đồ thị | `results/aws/runs.csv`, `analysis/figures/aws/` |
-| Code hạ tầng | `infra/terraform/main.tf`, `infra/ansible/cluster.yml`, `conf/`, `dev/` |
+| Code hạ tầng | `infra/terraform/main.tf`, `infra/ansible/cluster.yml`, `cluster/`, `dev/` |

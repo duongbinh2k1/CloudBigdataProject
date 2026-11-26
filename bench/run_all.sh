@@ -1,16 +1,12 @@
 #!/bin/bash
-# Runs the whole study on the master node, for one environment:
-#   bash bench/run_all.sh dev     (local cluster: make run)
-#   bash bench/run_all.sh aws     (EC2 master, inside tmux)
-# Sizes and codecs come from bench/experiments-<env>.yaml.
-# Steps already done are skipped, so after an interruption just run the same command again.
+# Whole study on the master: bash bench/run_all.sh dev|aws (steps already done are skipped)
 set -e
 env=$1
 config=bench/experiments-$env.yaml
 results=results/$env
 cd /opt/work
 
-yaml() {   # yaml <key> -> values of a list in the config file, separated by spaces
+yaml() {
   python3 -c "import yaml; print(' '.join(str(v) for v in yaml.safe_load(open('$config'))['$1']))"
 }
 sizes=$(yaml sizes)

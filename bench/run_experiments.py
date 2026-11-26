@@ -1,9 +1,4 @@
-"""Runs the experiments of a YAML file and writes one line per run in <results>/runs.csv.
-
-    python3 bench/run_experiments.py bench/experiments-dev.yaml results/dev
-
-Runs already "ok" in runs.csv are skipped, so the same command continues after an interruption.
-"""
+"""Runs the experiments of a YAML file: python3 bench/run_experiments.py <config> <results dir>"""
 import argparse
 import csv
 import random
@@ -19,7 +14,7 @@ JAR = "java/build/cloud-bigdata-project.jar"
 DATA = "hdfs://master:9000/data"
 OUTPUT = "hdfs://master:9000/results"
 HISTORY = "http://master:18080"
-WORKERS_FILE = "/opt/spark/conf/workers"   # written by Ansible on EC2, absent in the dev containers
+WORKERS_FILE = "/opt/spark/conf/workers"
 CLASSES = {"io_bound": "compression.apps.IoBound",
            "cpu_bound": "compression.apps.CpuBound",
            "balanced": "compression.apps.Balanced"}
@@ -28,7 +23,6 @@ COLUMNS = (["run_id", "status", "app", "sf", "storage", "shuffle", "rep", "wall_
 
 
 def configurations(cfg):
-    # (storage codec, shuffle codec) pairs of E1, E2 and E3, each only once
     pairs = {(s, "off") for s in cfg["storage_codecs"]}            # E1
     pairs |= {("none", s) for s in cfg["shuffle_codecs"]}          # E2
     if cfg.get("combined"):                                        # E3
@@ -43,7 +37,7 @@ def run_list(cfg):
             for sf in cfg["sizes"]
             for storage, shuffle in sorted(configurations(cfg))
             for rep in range(1, cfg["repetitions"] + 1)]
-    random.Random(cfg["seed"]).shuffle(runs)   # random order, but always the same one
+    random.Random(cfg["seed"]).shuffle(runs)
     return runs
 
 
@@ -57,7 +51,6 @@ def submit_command(cfg, app, sf, storage, shuffle, output):
     else:   # lz4, snappy, zstd (Spark has no gzip for shuffle)
         shuffle_conf = {"spark.shuffle.compress": "true", "spark.shuffle.spill.compress": "true",
                         "spark.io.compression.codec": shuffle}
-    # everything else: Spark's defaults and conf/spark/spark-defaults.conf
     cmd = ["spark-submit", "--class", CLASSES[app]]
     for key, value in shuffle_conf.items():
         cmd += ["--conf", f"{key}={value}"]
@@ -71,8 +64,6 @@ def submit_command(cfg, app, sf, storage, shuffle, output):
 
 
 def cluster_nodes():
-    # EC2: the master and the workers listed for start-workers.sh, reached by ssh.
-    # Dev: everything runs in the master container.
     if Path(WORKERS_FILE).exists():
         return ["master"] + Path(WORKERS_FILE).read_text().split(), True
     return ["master"], False
@@ -133,8 +124,7 @@ def main():
     out_dir = args.results
     out_dir.mkdir(parents=True, exist_ok=True)
     runs_csv = out_dir / "runs.csv"
-    # Adding sizes, codecs or repetitions is fine: only the new runs are done. Changing the
-    # work of an app (rounds) is not: the old runs would be mixed with runs of another workload.
+    # new sizes, codecs or repetitions are added to runs.csv, but not a different workload
     old = out_dir / "config.yaml"
     if runs_csv.exists() and old.exists() and yaml.safe_load(old.read_text()).get("rounds") != cfg.get("rounds"):
         raise SystemExit(f"rounds changed since the runs in {runs_csv}: move {out_dir} away to start again")

@@ -1,6 +1,5 @@
 ---
-# Install and start HDFS + Spark on the EC2 nodes: ansible-playbook cluster.yml
-# master: NameNode, Spark Master, History Server / workers: DataNode, Spark Worker
+# Installs and starts HDFS + Spark on the EC2 nodes, with the scripts of cluster/
 - name: Wait until the new machines accept SSH
   hosts: all
   gather_facts: false
@@ -12,7 +11,6 @@
 - name: Every node
   hosts: all
   become: true
-  vars_files: [vars.yml]
   tasks:
     - name: Hostname = name in the inventory
       ansible.builtin.hostname:
@@ -35,54 +33,13 @@
       loop: [unattended-upgrades.service, apt-daily.timer, apt-daily-upgrade.timer]
       failed_when: false
 
-    - name: Packages
-      ansible.builtin.apt:
-        name:
-          - openjdk-11-jdk-headless
-          - python3-yaml        # bench/run_experiments.py reads YAML
-          - sysstat             # sar / sadf
-          - libzstd1            # Hadoop's native zstd codec
-          - tmux
-        update_cache: true
-
-    - name: Download and unpack Hadoop and Spark
-      ansible.builtin.unarchive:
-        src: "{{ item.url }}"
-        dest: /opt
-        remote_src: true
-        owner: ubuntu
-        creates: "{{ item.dir }}"
-      loop:
-        - {url: "{{ hadoop_url }}", dir: "/opt/hadoop-{{ hadoop_version }}"}
-        - {url: "{{ spark_url }}", dir: "/opt/spark-{{ spark_version }}-bin-hadoop3"}
-
-    - name: /opt/hadoop and /opt/spark
-      ansible.builtin.file:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        state: link
-      loop:
-        - {src: "/opt/hadoop-{{ hadoop_version }}", dest: /opt/hadoop}
-        - {src: "/opt/spark-{{ spark_version }}-bin-hadoop3", dest: /opt/spark}
-
-    - name: Environment variables for every shell
+    - name: Copy the installation script and the configuration (cluster/)
       ansible.builtin.copy:
-        dest: /etc/profile.d/bigdata.sh
-        content: |
-          export JAVA_HOME={{ java_home }}
-          export HADOOP_HOME=/opt/hadoop
-          export HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-          export SPARK_HOME=/opt/spark
-          export PATH=/opt/spark/bin:/opt/spark/sbin:/opt/hadoop/bin:/opt/hadoop/sbin:$PATH
+        src: "{{ playbook_dir }}/../../cluster/"
+        dest: /opt/cluster/
 
-    - name: Hadoop and Spark configuration (the same files as the local cluster, in conf/)
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../conf/{{ item.src }}/"
-        dest: "{{ item.dest }}"
-        owner: ubuntu
-      loop:
-        - {src: hadoop, dest: /opt/hadoop/etc/hadoop/}
-        - {src: spark, dest: /opt/spark/conf/}
+    - name: Install Java, Hadoop and Spark (the same script as the local containers)
+      ansible.builtin.command: bash /opt/cluster/install.sh ubuntu
 
     - name: List of workers for start-dfs.sh and start-workers.sh
       ansible.builtin.copy:
@@ -90,21 +47,6 @@
         owner: ubuntu
         content: "{{ groups['workers'] | join('\n') }}\n"
       loop: [/opt/hadoop/etc/hadoop/workers, /opt/spark/conf/workers]
-
-    - name: Directories (HDFS data, project code)
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: ubuntu
-      loop: [/data/hdfs, /opt/work]
-
-    # zstd needs Hadoop's native library
-    - name: hadoop checknative must report zstd = true
-      ansible.builtin.command: /opt/hadoop/bin/hadoop checknative
-      environment: {JAVA_HOME: "{{ java_home }}"}
-      register: checknative
-      changed_when: false
-      failed_when: checknative.stdout is not search('zstd\s*:\s*true')
 
 - name: Passwordless SSH from the master to every node (start-*.sh scripts, run_experiments.py)
   hosts: all
@@ -139,27 +81,9 @@
   hosts: master
   become: true
   become_user: ubuntu
-  vars_files: [vars.yml]
-  environment:
-    JAVA_HOME: "{{ java_home }}"
   tasks:
-    - name: Format the NameNode (first time only)
-      ansible.builtin.command: /opt/hadoop/bin/hdfs namenode -format -nonInteractive
-      args: {creates: /data/hdfs/namenode/current/VERSION}
-
-    - name: (Re)start HDFS
-      ansible.builtin.shell: /opt/hadoop/sbin/stop-dfs.sh; /opt/hadoop/sbin/start-dfs.sh
-
-    - name: Wait until HDFS leaves safe mode
-      ansible.builtin.command: /opt/hadoop/bin/hdfs dfsadmin -safemode wait
-
-    - name: HDFS directories
-      ansible.builtin.command: /opt/hadoop/bin/hdfs dfs -mkdir -p /spark-logs /data /results
-
-    - name: (Re)start Spark master, workers and History Server
-      ansible.builtin.shell: |
-        /opt/spark/sbin/stop-all.sh; /opt/spark/sbin/stop-history-server.sh
-        /opt/spark/sbin/start-master.sh && /opt/spark/sbin/start-workers.sh && /opt/spark/sbin/start-history-server.sh
+    - name: Start the cluster (the same script as the local containers)
+      ansible.builtin.command: bash -l /opt/cluster/start-cluster.sh
 
     - name: Copy the project code (java/, bench/)
       ansible.posix.synchronize:
@@ -169,6 +93,5 @@
       become: false
 
     - name: Build the jar
-      ansible.builtin.command: bash java/build.sh
+      ansible.builtin.command: bash -l java/build.sh
       args: {chdir: /opt/work}
-      environment: {SPARK_HOME: /opt/spark}

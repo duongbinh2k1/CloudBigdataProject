@@ -15,7 +15,7 @@ Khoá SSH (`~/.ssh/cloud-bigdata-project`) được `make up ENV=aws` tự tạo
 
 ## 2. Dựng cluster
 
-1. `make up ENV=aws`: Terraform tạo 4 máy trong cùng một availability zone, rồi Ansible cài và khởi động HDFS + Spark, copy `java/` + `bench/` lên `/opt/work` và build jar. Playbook dừng lại nếu `hadoop checknative` không báo `zstd: true`.
+1. `make up ENV=aws`: Terraform tạo 4 máy trong cùng một availability zone, rồi Ansible cài và khởi động HDFS + Spark, copy `java/` + `bench/` lên `/opt/work` và build jar.
 2. (Tuỳ chọn) `make shell ENV=aws` rồi `hdfs dfsadmin -report` → 3 DataNode; http://localhost:8080 → 3 worker.
 
 zstd không cần kiểm tra riêng: `make run ENV=aws` sinh dữ liệu zstd ngay ở bước đầu. Nếu thư viện native không chạy, script dừng ở đó và `make status ENV=aws` hiện lỗi. Khi đó kiểm tra `spark.*.extraLibraryPath` trong `/opt/spark/conf/spark-defaults.conf`; nếu vẫn lỗi thì bỏ `zstd` khỏi `storage_codecs` trong `bench/experiments-aws.yaml` (đề ghi *"where supported"*), `make up ENV=aws` để copy file mới lên, rồi `make run ENV=aws`, và nêu điều này trong báo cáo.

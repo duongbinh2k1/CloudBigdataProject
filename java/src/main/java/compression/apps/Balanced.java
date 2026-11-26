@@ -12,8 +12,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
-// App 3 (balanced): lineitem join orders, then revenue, lines, delay and max SHA-256 (8 times)
-// per (customer, priority). Both tables are shuffled and there is some computation.
+// App 3 (balanced): lineitem join orders, then totals per (customer, priority)
 // spark-submit --class compression.apps.Balanced app.jar <lineitem dir> <orders dir> <output dir> <codec> [rounds]
 public class Balanced {
 

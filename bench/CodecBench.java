@@ -1,7 +1,4 @@
-// Codec micro-benchmark on one node, with Spark's own codec classes (the ones used for shuffle)
-// and java.util.zip for gzip. For each input and codec: compressed size, compression and
-// decompression time, 2 warm-up rounds then 5 measured rounds.
-//
+// Codec micro-benchmark on one node, with Spark's own codec classes (gzip: java.util.zip)
 //   java -cp "$SPARK_HOME/jars/*" bench/CodecBench.java <out.csv> <text file>
 
 import java.io.*;

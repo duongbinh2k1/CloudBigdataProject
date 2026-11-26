@@ -30,7 +30,6 @@ def get_json(url):
 
 
 def spark_metrics(history_url, app_id, timeout_s=180):
-    # sum over all the stages of the application
     url = f"{history_url}/api/v1/applications/{app_id}"
     deadline = time.time() + timeout_s
     while True:

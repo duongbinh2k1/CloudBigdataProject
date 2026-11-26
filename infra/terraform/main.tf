@@ -1,4 +1,4 @@
-# 1 master + N workers on EC2, in their own network (VPC) with one public subnet.
+# 1 master + N workers
 locals {
   names = concat(["master"], [for i in range(1, var.worker_count + 1) : "worker${i}"])
 }
@@ -13,8 +13,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# Network: a VPC with one public subnet, so that the nodes have a public IP (SSH from the
-# laptop, downloads) and talk to each other on their private IPs. All in one availability zone.
+# network: one public subnet in one availability zone
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true

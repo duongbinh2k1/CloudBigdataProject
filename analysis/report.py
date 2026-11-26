@@ -1,9 +1,4 @@
-"""Figures and tables of the report.
-
-    .venv/bin/python analysis/report.py results/aws
-
-E1 = runs with shuffle off, E2 = runs with storage none, E3 = C0..C3 of `combined` in config.yaml.
-"""
+"""Figures and tables: .venv/bin/python analysis/report.py results/<env>"""
 import sys
 from pathlib import Path
 
@@ -71,7 +66,7 @@ def storage_ratio(datasets_dir):
 
 
 def shuffle_ratio(e2):
-    # shuffle bytes without compression / with the codec, per app (mean over the sizes)
+    # shuffle bytes without compression / with the codec
     per = e2.groupby(["app", "sf", "shuffle"])["shuffle_write_bytes"].mean().unstack("shuffle")
     ratio = per.rdiv(per["off"], axis=0).drop(columns="off")
     return ratio.groupby("app").mean().reset_index().melt(id_vars="app", var_name="codec", value_name="ratio")
@@ -99,7 +94,6 @@ def apps_in(df):
 
 
 def metric_vs_size(runs, level, codecs, metric, title):
-    # one panel per app, one line per codec, error bars = std over the repetitions
     m = mean_std(runs, ["app", "sf", level], metric)
     apps = apps_in(m)
     fig, axes = plt.subplots(1, len(apps), figsize=(3.6 * len(apps), 3.2), squeeze=False)
@@ -143,7 +137,7 @@ def compression_ratio_fig(st_ratio, sh_ratio, codecs):
     grouped_bars(right, sh_ratio, "app", apps_in(sh_ratio), shuffle_codecs, "ratio")
     right.set_title("Shuffle (data written by map tasks)")
     right.set_ylabel("Compression ratio (off / compressed)")
-    right.set_ylim(0, right.get_ylim()[1] * 1.2)          # room for the legend above the bars
+    right.set_ylim(0, right.get_ylim()[1] * 1.2)
     right.legend(loc="upper center", ncol=len(shuffle_codecs))
     fig.tight_layout()
     return fig
@@ -205,7 +199,7 @@ def tradeoff_fig(raw):
 
 
 def main(results):
-    run_dir = env_dir = Path(results)          # results/dev or results/aws
+    run_dir = env_dir = Path(results)
     out = Path(__file__).parent / "figures" / env_dir.name
     tables = out / "tables"
     tables.mkdir(parents=True, exist_ok=True)

@@ -47,13 +47,16 @@ Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và
 Tài khoản dùng Free plan của AWS, và tổ chức quản lý tài khoản chỉ cho phép vùng Sydney (`ap-southeast-2`); Singapore gần Việt Nam hơn nhưng bị chặn. Khoảng cách từ Việt Nam không ảnh hưởng số đo, vì mọi số đo là bên trong cluster (các máy cùng một availability zone); chỉ SSH từ laptop trễ hơn một chút.
 
 **B6. Ansible làm gì?**
-Cài đặt và cấu hình các máy đã tạo, qua SSH, theo trình tự của TP: cài Java và gói, tải Hadoop/Spark, copy các file cấu hình trong `conf/` và file `workers`, SSH không mật khẩu, format NameNode, `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, copy code, build jar. File: `infra/ansible/cluster.yml`.
+Cài đặt và cấu hình các máy đã tạo, qua SSH: đặt tên máy và `/etc/hosts`, chạy script cài đặt `cluster/install.sh` trên mọi máy (Java, Hadoop, Spark, cấu hình), ghi file `workers`, SSH không mật khẩu, chạy `cluster/start-cluster.sh` trên master (`start-dfs.sh`, `start-master.sh`, `start-workers.sh`), copy code, build jar. Giống TP Ansible: lệnh cài viết trong một file shell, playbook đưa lên các máy và chạy. File: `infra/ansible/cluster.yml`.
+
+**B6b. Cluster local và EC2 có giống nhau không?**
+Cài đặt và khởi động **dùng chung đúng hai script** (`cluster/install.sh`, `cluster/start-cluster.sh`) và cùng file cấu hình: Dockerfile chạy `install.sh` trên image `ubuntu:22.04`, Ansible chạy nó trên máy EC2 Ubuntu 22.04. Nên thử ở local rồi chạy y nguyên trên cloud. Khác nhau chỉ ở phần bản chất của môi trường: container chạy bằng root và chung một laptop (CPU ARM, không có zstd native, không xoá được page cache), máy EC2 là máy thật x86.
 
 **B7. Vì sao không dùng Docker / Kubernetes trên AWS?**
 Container thêm một lớp mạng ảo (overlay) xen vào số đo mạng, mà mạng là thứ cần đo cho nén shuffle. HDFS trong container cũng hay gặp lỗi tên máy. Cài trực tiếp lên máy ảo giống cách làm trong TP. Ở laptop thì dùng container (Podman) để mô phỏng các máy: mỗi container là một Ubuntu, cài giống hệt EC2 và khởi động bằng cùng các lệnh `start-*.sh`.
 
 **B8. Cấu hình Spark (core, RAM) được đặt thế nào? Đổi máy thì sao?**
-Dùng **mặc định của Spark**, như slide (slide chỉ dạy `start-master.sh` / `start-slaves.sh` với file danh sách worker). Mặc định: mỗi worker cho Spark tất cả core và RAM − 1 GB; mỗi app có một executor mỗi worker dùng hết core, 1 GB heap; driver 1 GB; số partition mặc định = tổng số core. File cấu hình (`conf/`) chỉ có những gì cần để chạy: địa chỉ master và NameNode, `JAVA_HOME`, thư mục dữ liệu HDFS, event log cho History Server, thư viện native cho zstd. Đổi loại máy hay số worker chỉ cần sửa `infra/terraform/variables.tf`; mặc định tự theo máy mới.
+Dùng **mặc định của Spark**, như slide (slide chỉ dạy `start-master.sh` / `start-slaves.sh` với file danh sách worker). Mặc định: mỗi worker cho Spark tất cả core và RAM − 1 GB; mỗi app có một executor mỗi worker dùng hết core, 1 GB heap; driver 1 GB; số partition mặc định = tổng số core. File cấu hình (`cluster/hadoop/`, `cluster/spark/`) chỉ có những gì cần để chạy: địa chỉ master và NameNode, `JAVA_HOME`, thư mục dữ liệu HDFS, event log cho History Server, thư viện native cho zstd. Đổi loại máy hay số worker chỉ cần sửa `infra/terraform/variables.tf`; mặc định tự theo máy mới.
 
 **B9. Vì sao không chỉnh RAM/core cho Spark?**
 Không cần để thí nghiệm đúng: điều quan trọng là **mọi lần chạy dùng cùng một cấu hình**, để chỉ có nén thay đổi. Mặc định đáp ứng điều đó và đúng như cách cài trong môn học. Hệ quả cần biết: executor chỉ có 1 GB heap nên với dữ liệu lớn Spark sẽ **spill** (tràn dữ liệu xuống đĩa) nhiều hơn; đó cũng là chỗ `spark.shuffle.spill.compress` (nén khi spill) có tác dụng.
@@ -112,7 +115,7 @@ Spark chỉ hỗ trợ `lz4`, `lzf`, `snappy`, `zstd` cho `spark.io.compression.
 File text nén bằng gzip/snappy/lz4/zstd phải đọc từ đầu, không cắt giữa được, nên 1 file = 1 task. Project giữ mỗi file < 1 block (150 000 đơn ≈ 85 MB < 128 MB) để mọi codec, kể cả `none`, có cùng số task. Trong thực tế, nén một file lớn bằng gzip làm mất song song khi đọc: đó là một chi phí của nén ngoài CPU.
 
 **D5. Zstd lưu trữ cần gì đặc biệt?**
-`ZStandardCodec` của Hadoop cần thư viện native `libhadoop.so` (bản Hadoop chính thức chỉ có cho Linux x86_64) và `libzstd`. Ansible cài `libzstd1`, đặt `spark.*.extraLibraryPath=/opt/hadoop/lib/native` và kiểm tra `hadoop checknative` phải báo `zstd: true`. Trên Mac (ARM) không có, nên dev chỉ dùng 4 codec còn lại.
+`ZStandardCodec` của Hadoop cần thư viện native `libhadoop.so` (bản Hadoop chính thức chỉ có cho Linux x86_64) và `libzstd`. `cluster/install.sh` cài `libzstd1`, và `spark-defaults.conf` đặt `spark.*.extraLibraryPath=/opt/hadoop/lib/native` để Spark tìm thấy thư viện. Ngoài ra zstd dùng như mọi codec khác. Trên Mac (ARM) không có thư viện native, nên dev chỉ dùng 4 codec còn lại.
 
 **D6. Mức nén của Zstd là bao nhiêu?**
 Shuffle: mức Spark mặc định (1). Lưu trữ: mức mặc định của `ZStandardCodec` (3). Micro-benchmark đo cả zstd-1, zstd-3, zstd-9 để thấy đánh đổi.
@@ -247,7 +250,7 @@ File nén không chia được; nếu 1 file lớn thì bản nén chỉ có 1 t
 Rất ít: 1 mẫu mỗi giây, ghi file nhị phân nhỏ. Và nó chạy giống nhau ở mọi lần đo, nên không làm lệch so sánh. Dịch vụ sysstat định kỳ đã được tắt để không có thêm tiến trình nền.
 
 **I7. Executor chỉ 1 GB (mặc định) có làm sai kết quả không?**
-Không làm sai so sánh, vì mọi lần chạy dùng cùng cấu hình. Nó làm app chậm hơn và spill nhiều hơn so với một cluster được tinh chỉnh; kết luận đúng cho cấu hình mặc định này. Nếu muốn dùng nhiều RAM hơn, chỉ cần thêm `spark.executor.memory` vào `conf/spark/spark-defaults.conf` (và chạy lại toàn bộ).
+Không làm sai so sánh, vì mọi lần chạy dùng cùng cấu hình. Nó làm app chậm hơn và spill nhiều hơn so với một cluster được tinh chỉnh; kết luận đúng cho cấu hình mặc định này. Nếu muốn dùng nhiều RAM hơn, chỉ cần thêm `spark.executor.memory` vào `cluster/spark/spark-defaults.conf` (và chạy lại toàn bộ).
 
 **I8. Bạn có dùng công cụ AI không?**
 Trả lời trung thực, theo quy định của môn. Ví dụ: "Có, tôi dùng AI hỗ trợ viết một phần code và tài liệu; tôi đã kiểm tra, chạy và hiểu từng phần, và tự chạy thí nghiệm, phân tích kết quả." Nếu môn có quy định khai báo, ghi rõ trong báo cáo phần nào có AI hỗ trợ.
