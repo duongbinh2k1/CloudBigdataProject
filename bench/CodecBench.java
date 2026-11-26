@@ -2,6 +2,7 @@
 //   java -cp "$SPARK_HOME/jars/*" bench/CodecBench.java <out.csv> <text file>
 
 import java.io.*;
+import java.lang.management.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.zip.*;
@@ -35,29 +36,35 @@ public class CodecBench {
         return new ZStdCompressionCodec(conf);
     }
 
-    /** Returns {compressed bytes, compression ns, decompression ns}. */
+    static final ThreadMXBean THREAD = ManagementFactory.getThreadMXBean();   // CPU time of this thread
+
+    /** Returns {compressed bytes, compression ns, decompression ns, compression CPU ns, decompression CPU ns}. */
     static long[] roundTrip(String codec, byte[] data) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         long t0 = System.nanoTime();
+        long c0 = THREAD.getCurrentThreadCpuTime();
         try (OutputStream out = compress(codec, buffer)) {
             for (int off = 0; off < data.length; off += 65536) {     // write in 64 KB chunks
                 out.write(data, off, Math.min(65536, data.length - off));
             }
         }
         long compressNs = System.nanoTime() - t0;
+        long compressCpuNs = THREAD.getCurrentThreadCpuTime() - c0;
 
         byte[] compressed = buffer.toByteArray();
         t0 = System.nanoTime();
+        c0 = THREAD.getCurrentThreadCpuTime();
         byte[] restored;
         try (InputStream in = decompress(codec, new ByteArrayInputStream(compressed))) {
             restored = in.readAllBytes();
         }
         long decompressNs = System.nanoTime() - t0;
+        long decompressCpuNs = THREAD.getCurrentThreadCpuTime() - c0;
 
         if (!Arrays.equals(data, restored)) {
             throw new IOException(codec + ": decompressed data is different");
         }
-        return new long[] {compressed.length, compressNs, decompressNs};
+        return new long[] {compressed.length, compressNs, decompressNs, compressCpuNs, decompressCpuNs};
     }
 
     public static void main(String[] args) throws Exception {
@@ -68,7 +75,7 @@ public class CodecBench {
         inputs.put("random", random);
 
         try (PrintWriter csv = new PrintWriter(args[0])) {
-            csv.println("input,codec,iteration,input_bytes,compressed_bytes,comp_wall_ns,decomp_wall_ns");
+            csv.println("input,codec,iteration,input_bytes,compressed_bytes,comp_wall_ns,decomp_wall_ns,comp_cpu_ns,decomp_cpu_ns");
             for (String input : inputs.keySet()) {
                 byte[] data = inputs.get(input);
                 for (String codec : CODECS) {
@@ -76,7 +83,7 @@ public class CodecBench {
                     roundTrip(codec, data);
                     for (int i = 0; i < 5; i++) {
                         long[] r = roundTrip(codec, data);
-                        csv.println(input + "," + codec + "," + i + "," + data.length + "," + r[0] + "," + r[1] + "," + r[2]);
+                        csv.println(input + "," + codec + "," + i + "," + data.length + "," + r[0] + "," + r[1] + "," + r[2] + "," + r[3] + "," + r[4]);
                     }
                     System.out.println(input + " " + codec + " done");
                 }

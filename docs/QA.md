@@ -9,8 +9,8 @@ Mẹo chung: trả lời bằng **số liệu và code của project** ("trong `
 ## A. Tổng quan
 
 **A1. Project của bạn làm gì?**
-Ngắn: đo lợi ích và chi phí của nén dữ liệu trong Spark ở hai mức (file trên HDFS và dữ liệu shuffle), với 3 kiểu ứng dụng, 4 codec, 4 kích thước dữ liệu, trên cluster 4 máy EC2.
-Chi tiết: nén giảm byte phải đọc/ghi/truyền nhưng tốn CPU. Project tìm xem khi nào lợi lớn hơn hại, bằng cách thay đổi từng yếu tố một (E1: nén lưu trữ, E2: nén shuffle, E3: kết hợp), lặp 5 lần mỗi cấu hình, và đo thời gian, CPU, đĩa, mạng.
+Ngắn: đo lợi ích và chi phí của nén dữ liệu trong Spark ở hai mức (file trên HDFS và dữ liệu shuffle), với 3 kiểu ứng dụng, 4 codec, 4 kích thước dữ liệu, trên cluster 8 máy EC2 (1 master + 7 worker).
+Chi tiết: nén giảm byte phải đọc/ghi/truyền nhưng tốn CPU. Project tìm xem khi nào lợi lớn hơn hại, bằng cách thay đổi từng yếu tố một (E1: nén lưu trữ, E2: nén shuffle, E3: kết hợp), lặp 3 lần mỗi cấu hình, và đo thời gian, CPU, đĩa, mạng.
 
 **A2. Vì sao chọn Spark mà không phải Hadoop MapReduce?**
 Spark có cấu hình nén shuffle riêng (`spark.shuffle.compress`, `spark.io.compression.codec`), tách khỏi nén file, nên đo được từng mức riêng. Spark History Server cung cấp sẵn byte shuffle, thời gian CPU của từng stage. Spark cũng là nội dung chính của môn (slide `3-spark`, TP bằng Java).
@@ -29,19 +29,19 @@ Spark có cấu hình nén shuffle riêng (`spark.shuffle.compress`, `spark.io.c
 ## B. Hạ tầng
 
 **B1. Cluster gồm những gì?**
-4 máy EC2 cùng loại ở Sydney, trong một VPC riêng, cùng một availability zone: 1 master (NameNode, Spark Master, History Server, chạy driver và script thí nghiệm) và 3 worker (mỗi máy một DataNode và một Spark Worker). DataNode và Worker đặt chung máy để Spark đọc block HDFS ngay tại chỗ (data locality).
+8 máy EC2 `m7i-flex.large` ở Sydney, trong một VPC riêng, cùng một availability zone: 1 master (NameNode, Spark Master, History Server, chạy driver và script thí nghiệm) và 7 worker (mỗi máy một DataNode và một Spark Worker). DataNode và Worker đặt chung máy để Spark đọc block HDFS ngay tại chỗ (data locality).
 
 **B2. Vì sao ít nhất 2 máy, vì sao không chạy tất cả trên 1 máy?**
 Để shuffle đi qua mạng thật. Trên một máy, "mạng" chỉ là bộ nhớ nên nén truyền thông không có ý nghĩa. Ngoài ra các tiến trình dùng chung CPU và đĩa, số đo bị nhiễu.
 
-**B3. Vì sao `m5.xlarge` mà không phải `t3`?**
-`t3` là máy *burstable*: dùng CPU theo "credit", hết credit thì bị giới hạn CPU. Hiệu năng thay đổi giữa đầu và cuối đợt đo, trùng với thứ tự chạy → sai số. `m5` có CPU ổn định. Tương tự, đĩa `gp3` có hiệu năng cố định (3000 IOPS, 125 MB/s), còn `gp2` có credit I/O.
+**B3. Vì sao `m7i-flex.large` mà không phải `t3`?**
+`t3` là máy *burstable*: dùng CPU theo "credit", hết credit thì bị giới hạn CPU. Hiệu năng thay đổi giữa đầu và cuối đợt đo, trùng với thứ tự chạy → sai số. `m7i-flex` không dùng credit. Tương tự, đĩa `gp3` có hiệu năng cố định (3000 IOPS, 125 MB/s), còn `gp2` có credit I/O.
 
-**B4. Còn máy `m7i-flex.large` thì sao?**
-Chỉ để **test** cluster vì nó có trong Free plan của AWS. Máy "flex" không đảm bảo luôn có 100% CPU nên số đo trên đó không dùng cho báo cáo.
+**B4. Máy "flex" có ảnh hưởng số đo không? Sao không dùng `m5`?**
+Tài khoản Free plan không cho dùng `m5`, và quota là 16 vCPU (= 8 máy 2 vCPU, nên 7 worker). AWS cho máy "flex" chạy 100% CPU phần lớn thời gian nhưng không bảo đảm luôn luôn. Giảm ảnh hưởng: mọi cấu hình chạy trên cùng cluster, lặp 3 lần, thứ tự xáo trộn (nhiễu rải đều cho mọi codec), và error bar cho thấy độ dao động. Báo cáo nêu rõ giới hạn này.
 
 **B5. Terraform làm gì? Vì sao dùng?**
-Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và TP Terraform): mạng (VPC, subnet, internet gateway, bảng định tuyến), security group, key pair, 4 máy EC2, và file `inventory.ini` cho Ansible. Lợi ích: tái lập được (`terraform apply` lại ra đúng cluster), xoá sạch được (`terraform destroy`), không thao tác tay trên console. File: `infra/terraform/main.tf`.
+Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và TP Terraform): mạng (VPC, subnet, internet gateway, bảng định tuyến), security group, key pair, 8 máy EC2, và file `inventory.ini` cho Ansible. Lợi ích: tái lập được (`terraform apply` lại ra đúng cluster), xoá sạch được (`terraform destroy`), không thao tác tay trên console. File: `infra/terraform/main.tf`.
 
 **B5b. Vì sao chọn vùng Sydney?**
 Tài khoản dùng Free plan của AWS, và tổ chức quản lý tài khoản chỉ cho phép vùng Sydney (`ap-southeast-2`); Singapore gần Việt Nam hơn nhưng bị chặn. Khoảng cách từ Việt Nam không ảnh hưởng số đo, vì mọi số đo là bên trong cluster (các máy cùng một availability zone); chỉ SSH từ laptop trễ hơn một chút.
@@ -71,7 +71,7 @@ Spark History Server (số đo theo ứng dụng: thời gian, CPU, byte shuffle
 `make up ENV=aws` rồi `make run ENV=aws`. Phiên bản phần mềm cố định (Hadoop 3.4.1, Spark 3.5.5, Java 11), hạ tầng bằng code, dữ liệu tất định (seed 42), thứ tự chạy cố định (seed trong YAML), cấu hình thí nghiệm lưu cùng kết quả (`results/aws/config.yaml`).
 
 **B13. Chi phí bao nhiêu?**
-Khoảng 1 USD/giờ khi cluster bật (4 × m5.xlarge + đĩa), cả đợt đo khoảng 1 ngày ≈ 25–35 USD, nằm trong credit của tài khoản mới. Cluster được xoá ngay khi xong (`make down ENV=aws`).
+Khoảng 1,1 USD/giờ khi cluster bật (8 × m7i-flex.large + đĩa), cả đợt đo khoảng 18–24 giờ ≈ 20–30 USD, nằm trong credit của tài khoản mới. Cluster được xoá ngay khi xong (`make down ENV=aws`).
 
 ---
 
@@ -143,7 +143,7 @@ Mỗi giá trị là hàm băm SplitMix64 của (seed 42, tên cột, khoá dòn
 Text + `textFile` / `saveAsTextFile` đúng mô hình RDD của môn; nén lưu trữ là nén cả file, dễ giải thích. Parquet cần Spark SQL/DataFrame (không có trong môn) và nén theo từng trang nhỏ bên trong file.
 
 **E5. Dữ liệu chiếm bao nhiêu chỗ?**
-5 bản (none + 4 codec) × SF 1+5+10+20 ≈ 88 GB trên mỗi worker (3 bản sao chia cho 3 worker), cộng file shuffle → đĩa 200 GB mỗi máy.
+5 bản (none + 4 codec) × SF 1+5+10+20 ≈ 88 GB; × 3 bản sao HDFS / 7 worker ≈ 38 GB mỗi worker, cộng output và file shuffle → đĩa 100 GB mỗi máy.
 
 ---
 
@@ -186,13 +186,13 @@ Linux giữ file vừa đọc trong RAM. Không xoá thì lần sau đọc từ 
 Lần chạy đầu chậm hơn vì JVM khởi động, JIT chưa tối ưu, metadata HDFS chưa nằm trong bộ nhớ. Mỗi app chạy 1 lần không ghi lại trước khi đo.
 
 **G5. Bao nhiêu lần chạy tổng cộng? Tính thế nào?**
-9 cặp (codec lưu trữ, codec shuffle): E1 có 5, E2 có 4, chung `(none, off)` → 8, E3 thêm `(zstd, lz4)` → 9. × 3 app × 4 kích thước × 5 lần lặp = **540**.
+9 cặp (codec lưu trữ, codec shuffle): E1 có 5, E2 có 4, chung `(none, off)` → 8, E3 thêm `(zstd, lz4)` → 9. × 3 app × 4 kích thước × 3 lần lặp = **324**.
 
 **G6. Nếu bị ngắt giữa chừng thì sao?**
 Chạy lại đúng lệnh. Dữ liệu đã sinh (có file `sf<N>.txt`) được bỏ qua; các lần chạy có `status = ok` trong `runs.csv` được bỏ qua. Chạy trong `tmux` trên master nên tắt laptop không ảnh hưởng.
 
 **G7. Đo CPU thế nào? Đo đĩa và mạng thế nào?**
-CPU: `executorCpuTime` cộng qua mọi stage (History Server), và %CPU từ `sar`. Đĩa: `sar -b` (khối 512 byte/giây) trên mọi node. Mạng: `sar -n DEV` (kB/giây, bỏ card `lo`). Byte shuffle và byte shuffle qua mạng: History Server.
+CPU: `executorCpuTime` cộng qua mọi stage (History Server), và %CPU từ `sar`. Đĩa: `sar -b` (khối 512 byte/giây) trên mọi node. Mạng: `sar -n DEV` (kB/giây, bỏ card `lo`). Bộ nhớ: `sar -r` (`%memused`, trung bình và đỉnh). Byte shuffle và byte shuffle qua mạng: History Server.
 
 **G8. Sao biết lần chạy dùng đúng cấu hình?**
 Mỗi dòng `runs.csv` ghi codec lưu trữ và shuffle của lần chạy, và các cấu hình Spark khác là mặc định, giống nhau ở mọi lần. Số byte cũng xác nhận: byte shuffle thay đổi theo codec shuffle (nén đã bật), byte input thay đổi theo codec lưu trữ (đọc đúng bản dữ liệu).
@@ -232,16 +232,16 @@ App CPU-bound; dữ liệu không nén được; mạng/đĩa nhanh so với CPU
 ## I. Câu hỏi "khó"
 
 **I1. Kết quả của bạn có tổng quát không?**
-Đúng cho cấu hình này: m5.xlarge, mạng EC2, file text, Spark 3.5. Máy nhiều core hơn (nén song song nhiều hơn) hoặc mạng chậm hơn có thể cho kết luận khác. Phương pháp và code thì dùng lại được: đổi máy chỉ cần sửa `variables.tf`.
+Đúng cho cấu hình này: m7i-flex.large (2 vCPU), mạng EC2, file text, Spark 3.5. Máy nhiều core hơn (nén song song nhiều hơn) hoặc mạng chậm hơn có thể cho kết luận khác. Phương pháp và code thì dùng lại được: đổi máy chỉ cần sửa `variables.tf`.
 
 **I2. Nếu mạng chậm (1 Gbps) thì sao?**
 Nén shuffle sẽ có lợi hơn vì truyền dữ liệu chiếm nhiều thời gian hơn. Project không giả lập mạng chậm vì đề không yêu cầu; có thể lập luận bằng `shuffle_fetch_wait_ms` và tỉ lệ nén shuffle.
 
 **I3. Sai số đo lớn đến đâu thì kết luận không còn chắc?**
-Nếu error bar của hai codec chồng lên nhau thì không kết luận được codec nào nhanh hơn; chỉ nói "không khác biệt rõ". Đó là lý do lặp 5 lần.
+Nếu error bar của hai codec chồng lên nhau thì không kết luận được codec nào nhanh hơn; chỉ nói "không khác biệt rõ". Đó là lý do lặp lại (3 lần mỗi cấu hình).
 
 **I4. Tại sao không đo nhiều mức nén (zstd 1–19)?**
-Micro-benchmark có đo zstd-1/3/9 để thấy xu hướng. Trên cluster dùng mức mặc định của từng hệ thống (Spark 1, Hadoop 3) để giữ số lần chạy hợp lý (540).
+Micro-benchmark có đo zstd-1/3/9 để thấy xu hướng. Trên cluster dùng mức mặc định của từng hệ thống (Spark 1, Hadoop 3) để giữ số lần chạy hợp lý (324).
 
 **I5. Vì sao file 150 000 đơn mà không phải 1 file lớn?**
 File nén không chia được; nếu 1 file lớn thì bản nén chỉ có 1 task đọc, bản `none` có nhiều task → so sánh không công bằng. Mỗi file < 1 block nên mọi codec có cùng số task.

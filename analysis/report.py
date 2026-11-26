@@ -184,7 +184,10 @@ def tradeoff_fig(raw):
     raw["ratio"] = raw["input_bytes"] / raw["compressed_bytes"]
     raw["comp_mb_s"] = raw["input_bytes"] / raw["comp_wall_ns"] * 1e3
     raw["decomp_mb_s"] = raw["input_bytes"] / raw["decomp_wall_ns"] * 1e3
-    summary = raw.groupby("codec")[["ratio", "comp_mb_s", "decomp_mb_s"]].median().reset_index()
+    raw["comp_cpu_s_per_gb"] = raw["comp_cpu_ns"] / raw["input_bytes"]       # ns/byte = s/GB
+    raw["decomp_cpu_s_per_gb"] = raw["decomp_cpu_ns"] / raw["input_bytes"]
+    columns = ["ratio", "comp_mb_s", "decomp_mb_s", "comp_cpu_s_per_gb", "decomp_cpu_s_per_gb"]
+    summary = raw.groupby("codec")[columns].median().reset_index()
     fig, ax = plt.subplots(figsize=(5, 3.6))
     for r in summary.itertuples():
         family = r.codec.split("-")[0]
@@ -242,7 +245,7 @@ def main(results):
     moved = c0["input_bytes"] + c0["shuffle_read_bytes"] + c0["shuffle_write_bytes"] + c0["output_bytes"]
     c0["mb_per_cpu_s"] = moved / 1e6 / c0["cpu_s"]
     char = c0.groupby(["app", "sf"])[["time_s", "cpu_ratio", "mb_per_cpu_s", "cpu_busy_pct", "cpu_iowait_pct",
-                                      "shuffle_write_gb"]].mean().reset_index()
+                                      "mem_used_pct", "mem_max_pct", "shuffle_write_gb"]].mean().reset_index()
 
     char.round(3).to_csv(tables / "workload_characterisation.csv", index=False)
     st_ratio.round(3).to_csv(tables / "ratio_storage.csv", index=False)

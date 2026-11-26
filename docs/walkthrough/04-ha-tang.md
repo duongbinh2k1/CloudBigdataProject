@@ -231,9 +231,9 @@ Terraform đọc các file `.tf`, so với trạng thái đã lưu (`terraform.t
 |---|---|---|
 | `region` | `ap-southeast-2` (Sydney) | vùng duy nhất tài khoản Free plan được dùng |
 | `my_ip_cidr` | (Makefile truyền vào) | IP laptop + `/32` (đúng một địa chỉ) |
-| `instance_type` | `m7i-flex.large` (tạm, để test) | loại máy; chính thức: `m5.xlarge` |
-| `worker_count` | 3 | số worker |
-| `disk_gb` | 200 | dung lượng đĩa mỗi máy |
+| `instance_type` | `m7i-flex.large` | loại máy (2 vCPU, 8 GB; có trong Free plan) |
+| `worker_count` | 7 | số worker (1 + 7 máy × 2 vCPU = 16 = quota) |
+| `disk_gb` | 100 | dung lượng đĩa mỗi máy (dữ liệu ≈ 38 GB mỗi worker) |
 
 **`main.tf`**, từng khối:
 

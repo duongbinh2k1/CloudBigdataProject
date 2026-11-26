@@ -46,11 +46,11 @@ Môi trường phải **tái lập được**, và **cùng một cấu hình h�
 
 | Yêu cầu | Lựa chọn | File |
 |---|---|---|
-| Cluster máy ảo | 4–8 máy EC2 (AWS) Ubuntu 22.04: 1 master + N worker | `infra/terraform/` |
+| Cluster máy ảo | 8 máy EC2 `m7i-flex.large` (AWS) Ubuntu 22.04: 1 master + 7 worker | `infra/terraform/` |
 | HDFS | Hadoop 3.4.1, chỉ dùng HDFS: NameNode trên master, DataNode trên mỗi worker | `cluster/hadoop/` |
 | Spark | Spark 3.5.5 **standalone**: Master trên master, Worker trên mỗi worker | `cluster/spark/` |
-| Nhiều worker | 3 (thử nghiệm) đến 7 (tối đa của tài khoản) | `variables.tf` |
-| Giám sát | **Spark History Server** (số đo theo ứng dụng) + **`sar`** (số đo theo máy, mỗi giây) | `bench/metrics.py` |
+| Nhiều worker | 7 (tối đa với quota 16 vCPU của tài khoản) | `variables.tf` |
+| Giám sát | **Spark History Server** (số đo theo ứng dụng) + **`sar`** (CPU, bộ nhớ, đĩa, mạng theo máy, mỗi giây) | `bench/metrics.py` |
 | Tái lập | Terraform (tạo máy) + Ansible + script cài/khởi động dùng chung (`cluster/install.sh`, `start-cluster.sh`); phiên bản cố định; dữ liệu tất định | `infra/`, `cluster/` |
 | Cùng cấu hình | cấu hình Spark mặc định, giống nhau ở mọi lần chạy; chỉ codec thay đổi | `cluster/spark/spark-defaults.conf` |
 | Thử trước ở local | 3 container Ubuntu cài bằng **cùng script** | `dev/` |
@@ -103,7 +103,7 @@ Chứng minh: bảng `workload_characterisation.csv` với `cpu_ratio` (CPU / th
 | LZ4 | `Lz4Codec` | `lz4` |
 | Zstd | `ZStandardCodec` (cần thư viện native, chỉ chạy trên EC2 x86) | `zstd` |
 
-Đặc tính riêng: **micro-benchmark** `bench/CodecBench.java`, nén/giải nén một file dữ liệu thật và 64 MB dữ liệu ngẫu nhiên trên một máy, đo tỉ lệ, thời gian nén, thời gian giải nén (7 codec, gồm zstd ở 3 mức).
+Đặc tính riêng: **micro-benchmark** `bench/CodecBench.java`, nén/giải nén một file dữ liệu thật và 64 MB dữ liệu ngẫu nhiên trên một máy, đo tỉ lệ, thời gian nén, thời gian giải nén, và **thời gian CPU** nén/giải nén (7 codec, gồm zstd ở 3 mức).
 
 ---
 
@@ -188,7 +188,7 @@ Xác định bật cả hai **có thêm lợi** hay chỉ **thêm chi phí CPU t
   7. Khi nào nên **tắt** nén?
 - Kết luận phải dựa trên **bằng chứng thực nghiệm**.
 
-**Project làm thế nào.** Lặp mỗi cấu hình 3–5 lần, thứ tự xáo trộn; error bar = độ lệch chuẩn (`analysis/report.py`). Bảng nối mỗi câu hỏi với đồ thị/bảng dùng để trả lời: xem [06-phan-tich.md](06-phan-tich.md), mục 6. Câu trả lời cuối cùng viết trong báo cáo, từ số liệu AWS.
+**Project làm thế nào.** Lặp mỗi cấu hình 3 lần, thứ tự xáo trộn; error bar = độ lệch chuẩn (`analysis/report.py`). Bảng nối mỗi câu hỏi với đồ thị/bảng dùng để trả lời: xem [06-phan-tich.md](06-phan-tich.md), mục 6. Câu trả lời cuối cùng viết trong báo cáo, từ số liệu AWS.
 
 ---
 
@@ -209,12 +209,12 @@ Xác định bật cả hai **có thêm lợi** hay chỉ **thêm chi phí CPU t
 |---|---|---|
 | §2 | HDFS phân tán, Spark, nhiều worker | ✅ |
 | §2 | Giám sát CPU, đĩa, mạng | ✅ (`sar`, History Server) |
-| §2 | Giám sát **bộ nhớ** | ⚠️ **chưa đo**: `sar` chưa thu báo cáo bộ nhớ (`-r`) |
+| §2 | Giám sát bộ nhớ | ✅ (`sar -r`: `mem_used_pct`, `mem_max_pct`) |
 | §2 | Tái lập, cùng cấu hình khi so sánh | ✅ |
 | §3 | 3 app I/O, CPU, cân bằng + chứng minh bằng số đo | ✅ (bảng đặc tính workload) |
 | §4 | Snappy, LZ4, Gzip, Zstd + không nén | ✅ (gzip không có cho shuffle: Spark không hỗ trợ) |
 | §4 | Đặc tính riêng: tỉ lệ, thời gian nén, thời gian giải nén | ✅ (micro-benchmark) |
-| §4 | Đặc tính riêng: **chi phí CPU** | ⚠️ chỉ đo thời gian đồng hồ (≈ thời gian CPU vì codec chạy một luồng), chưa đo riêng thời gian CPU |
+| §4 | Đặc tính riêng: chi phí CPU | ✅ (`comp_cpu_ns`, `decomp_cpu_ns` → giây CPU/GB) |
 | §5.1 | Kích thước sau nén, thời gian, CPU, I/O đĩa | ✅ |
 | §5.2 | Thời gian, lưu lượng mạng, CPU, thời gian shuffle | ✅ |
 | §5.3 | C0–C3 | ✅ |

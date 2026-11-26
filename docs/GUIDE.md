@@ -15,7 +15,7 @@ Thứ tự đọc nên theo: mục 1 → 2 → 3 → 4 (hiểu bức tranh chung
 | Số liệu thật trên AWS (`results/aws/`) | ⬜ |
 | Báo cáo, slide (trả lời 7 câu hỏi bằng số liệu) | ⬜ |
 
-Cấu hình AWS hiện đang ở chế độ **test** (máy `m7i-flex.large`, SF 1, 1 lần lặp). Số liệu báo cáo phải chạy lại bằng `m5.xlarge`, SF 1/5/10/20, 5 lần lặp (xem [AWS.md](AWS.md)).
+Cấu hình AWS đã đặt cho đợt chính thức: 8 máy `m7i-flex.large` (1 master + 7 worker), SF 1/5/10/20, 3 lần lặp, 324 lần chạy (xem [AWS.md](AWS.md)).
 
 ---
 
@@ -31,14 +31,14 @@ Nén có **lợi**: ít byte hơn phải đọc/ghi đĩa và truyền qua mạn
 
 | Mục đề | Nội dung | Trong project |
 |---|---|---|
-| §2 Hạ tầng | cluster Hadoop/Spark, HDFS, nhiều worker, công cụ giám sát, tái lập được | Spark standalone + HDFS trên 4 máy EC2 (Terraform + Ansible); giám sát bằng `sar` và Spark History Server |
+| §2 Hạ tầng | cluster Hadoop/Spark, HDFS, nhiều worker, công cụ giám sát, tái lập được | Spark standalone + HDFS trên 8 máy EC2 (1 master + 7 worker) (Terraform + Ansible); giám sát bằng `sar` và Spark History Server |
 | §3 Ứng dụng | 3 loại: I/O-bound, CPU-bound, cân bằng | `IoBound`, `CpuBound`, `Balanced` (Java, RDD) |
 | §4 Thuật toán | Snappy, LZ4, Gzip, Zstd (nếu được hỗ trợ) + không nén | cả 4 + `none`/`off`; đo thêm bằng micro-benchmark |
 | §5.1 Nén lưu trữ | nén file trên HDFS | E1 |
 | §5.2 Nén truyền thông | nén dữ liệu shuffle | E2 |
 | §5.3 Kết hợp | C0–C3 | E3 |
 | §5.4 Kích thước | nhiều kích thước dữ liệu | SF 1, 5, 10, 20 (≈ 1–20 GB) |
-| §6 Kết quả | lặp nhiều lần, đồ thị (có error bar), trả lời 7 câu hỏi | 5 lần lặp, `analysis/report.py`, báo cáo |
+| §6 Kết quả | lặp nhiều lần, đồ thị (có error bar), trả lời 7 câu hỏi | 3 lần lặp, `analysis/report.py`, báo cáo |
 | §7 Nộp | script hạ tầng, số liệu thô, script thí nghiệm, đồ thị, báo cáo, slide | `infra/`, `results/`, `bench/`, `analysis/`, `report/` |
 
 ---
@@ -104,9 +104,9 @@ Mặc định Spark **bật** nén shuffle với LZ4. Trong thí nghiệm, scrip
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- 4 máy EC2 cùng loại (hiện tại `m7i-flex.large` để test, `m5.xlarge` cho số liệu chính thức), Ubuntu 22.04, đĩa gp3 200 GB, trong một VPC riêng do Terraform tạo.
+- 8 máy EC2 cùng loại `m7i-flex.large` (2 vCPU, 8 GB; loại duy nhất phù hợp trên Free plan), Ubuntu 22.04, đĩa gp3 100 GB, trong một VPC riêng do Terraform tạo.
 - Vùng Sydney (`ap-southeast-2`): vùng duy nhất tài khoản Free plan được phép dùng.
-- Ít nhất 2 máy thật để shuffle đi qua **mạng thật** (yêu cầu của thầy). 3 worker để có song song.
+- Ít nhất 2 máy thật để shuffle đi qua **mạng thật** (yêu cầu của thầy). 7 worker (tối đa với quota 16 vCPU) để có song song.
 - Chỉ IP hiện tại của laptop được SSH vào cluster (security group).
 
 ### 3.2 Ở local (phát triển, không dùng số liệu)
@@ -163,7 +163,7 @@ Mọi lệnh gõ trên laptop. `ENV=dev` (mặc định) là cluster local, `ENV
 ```
 make up ENV=aws
  ├─ tạo khoá SSH ~/.ssh/cloud-bigdata-project nếu chưa có
- ├─ Terraform: tạo 4 máy EC2 + security group + key pair (với IP hiện tại của laptop)
+ ├─ Terraform: tạo 8 máy EC2 + security group + key pair (với IP hiện tại của laptop)
  │             → ghi infra/ansible/inventory.ini (tên máy, IP public, IP private)
  └─ Ansible (cluster.yml):
       chờ SSH → tên máy, /etc/hosts → cluster/install.sh trên mọi máy (Java, Hadoop, Spark, cấu hình)
@@ -381,7 +381,7 @@ x, y = cfg["combined"]["storage"], cfg["combined"]["shuffle"]
 pairs |= {("none", "off"), (x, "off"), ("none", y), (x, y)}   # E3: C0, C1, C2, C3
 ```
 
-Với `experiments-aws.yaml` chính thức: E1 có 5 cặp, E2 có 4, chung nhau `(none, off)` → 8; E3 thêm `(zstd, lz4)` (C1 và C2 đã có trong E1/E2) → **9 cặp**. × 3 app × 4 kích thước × 5 lần lặp = **540 lần chạy**.
+Với `experiments-aws.yaml` chính thức: E1 có 5 cặp, E2 có 4, chung nhau `(none, off)` → 8; E3 thêm `(zstd, lz4)` (C1 và C2 đã có trong E1/E2) → **9 cặp**. × 3 app × 4 kích thước × 3 lần lặp = **324 lần chạy**.
 
 **Bước 2. Xáo trộn thứ tự** với seed cố định:
 
@@ -432,10 +432,11 @@ Bỏ qua stage `SKIPPED` (Spark tái dùng kết quả cũ, không chạy).
 
 **`sar`** (gói sysstat) trên mỗi node, mỗi giây một mẫu; `sadf -d` xuất ra CSV:
 - `-u`: %CPU (user + nice + system), %iowait;
+- `-r`: %RAM đang dùng (`%memused`);
 - `-b`: đọc/ghi đĩa (đơn vị khối 512 byte/giây → nhân 512);
 - `-n DEV`: mạng nhận/gửi (kB/giây → nhân 1024; bỏ card `lo`).
 
-Tổng hợp: %CPU lấy trung bình qua các node; byte đĩa và mạng cộng qua các node.
+Tổng hợp: %CPU và %RAM lấy trung bình qua các node (RAM có thêm giá trị đỉnh); byte đĩa và mạng cộng qua các node.
 
 ### 5.7 `analysis/report.py`: đồ thị và bảng
 
@@ -518,7 +519,7 @@ Công thức:
 | E2 | none | off, lz4, snappy, zstd | nén truyền thông có lợi không (§5.2) |
 | E3 | C0 none/off · C1 zstd/off · C2 none/lz4 · C3 zstd/lz4 | | kết hợp hai mức (§5.3) |
 
-× 3 app × SF 1, 5, 10, 20 × 5 lần lặp → 540 lần chạy (mục 5.5).
+× 3 app × SF 1, 5, 10, 20 × 3 lần lặp → 324 lần chạy (mục 5.5).
 
 **Vì sao tách E1 và E2?** Mỗi thí nghiệm chỉ thay đổi **một** yếu tố. Ở E1 shuffle luôn tắt nén, nên mọi khác biệt là do nén lưu trữ. Ở E2 dữ liệu luôn không nén, nên mọi khác biệt là do nén shuffle.
 
@@ -526,7 +527,7 @@ Công thức:
 
 | Biện pháp | Tránh được |
 |---|---|
-| 5 lần lặp, error bar (độ lệch chuẩn) | kết luận từ một lần chạy may/rủi |
+| 3 lần lặp, error bar (độ lệch chuẩn) | kết luận từ một lần chạy may/rủi |
 | Thứ tự xáo trộn (seed cố định) | nhiễu theo thời gian trùng với một codec |
 | 1 lần khởi động mỗi app | lần đầu chậm do JVM, cache |
 | Xoá page cache mọi node trước mỗi lần | đọc từ RAM thay vì đĩa (che mất lợi ích nén lưu trữ) |
@@ -550,6 +551,7 @@ Công thức:
 | `disk_read_bytes`, `disk_write_bytes` | sar | I/O đĩa thật, mọi node |
 | `net_rx_bytes`, `net_tx_bytes` | sar | lưu lượng mạng thật, mọi node |
 | `cpu_busy_pct`, `cpu_iowait_pct` | sar | %CPU bận, %CPU chờ I/O |
+| `mem_used_pct`, `mem_max_pct` | sar | %RAM dùng trung bình, đỉnh |
 
 ---
 

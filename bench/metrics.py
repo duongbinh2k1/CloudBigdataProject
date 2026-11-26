@@ -19,9 +19,9 @@ STAGE_FIELDS = {
     "memoryBytesSpilled": "memory_spill_bytes",
 }
 SPARK_COLUMNS = ["app_id", "duration_ms"] + list(STAGE_FIELDS.values())
-SAR_COLUMNS = ["cpu_busy_pct", "cpu_iowait_pct", "disk_read_bytes", "disk_write_bytes",
-               "net_rx_bytes", "net_tx_bytes"]
-SAR_REPORTS = {"cpu": "-u", "disk": "-b", "net": "-n DEV"}
+SAR_COLUMNS = ["cpu_busy_pct", "cpu_iowait_pct", "mem_used_pct", "mem_max_pct", "disk_read_bytes",
+               "disk_write_bytes", "net_rx_bytes", "net_tx_bytes"]
+SAR_REPORTS = {"cpu": "-u", "mem": "-r", "disk": "-b", "net": "-n DEV"}
 
 
 def get_json(url):
@@ -63,14 +63,18 @@ def parse_sadf(text):
 
 
 def sar_summary(per_node):
-    # CPU %: mean over the nodes. Disk and network: bytes summed over the nodes (1 sample per second)
-    busy, iowait = [], []
-    totals = dict.fromkeys(SAR_COLUMNS[2:], 0)
+    # CPU and memory %: mean over the nodes (memory also its peak). Disk and network: bytes summed over the nodes
+    busy, iowait, mem, mem_max = [], [], [], 0.0
+    totals = dict.fromkeys(SAR_COLUMNS[4:], 0)
     for texts in per_node.values():
         cpu = parse_sadf(texts["cpu"])
         if cpu:
             busy.append(sum(float(r["%user"]) + float(r["%nice"]) + float(r["%system"]) for r in cpu) / len(cpu))
             iowait.append(sum(float(r["%iowait"]) for r in cpu) / len(cpu))
+        used = [float(r["%memused"]) for r in parse_sadf(texts["mem"])]
+        if used:
+            mem.append(sum(used) / len(used))
+            mem_max = max(mem_max, *used)
         for r in parse_sadf(texts["disk"]):           # blocks of 512 bytes
             totals["disk_read_bytes"] += float(r["bread/s"]) * 512
             totals["disk_write_bytes"] += float(r["bwrtn/s"]) * 512
@@ -81,4 +85,6 @@ def sar_summary(per_node):
     summary = {k: int(v) for k, v in totals.items()}
     summary["cpu_busy_pct"] = round(sum(busy) / len(busy), 2) if busy else ""
     summary["cpu_iowait_pct"] = round(sum(iowait) / len(iowait), 2) if iowait else ""
+    summary["mem_used_pct"] = round(sum(mem) / len(mem), 2) if mem else ""
+    summary["mem_max_pct"] = round(mem_max, 2) if mem else ""
     return summary

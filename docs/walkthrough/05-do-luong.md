@@ -15,8 +15,8 @@ Các file trong `bench/`:
 `bench/experiments-aws.yaml`:
 ```yaml
 seed: 20261111                                     # seed xáo trộn thứ tự chạy (cố định → tái lập được)
-repetitions: 1                                     # số lần lặp mỗi cấu hình (TẠM: chính thức 3 hoặc 5)
-sizes: [1]                                         # các SF (TẠM: chính thức [1, 5, 10, 20])
+repetitions: 3                                     # số lần lặp mỗi cấu hình
+sizes: [1, 5, 10, 20]                              # các SF ≈ 1, 5, 10, 20 GB (§5.4 của đề)
 apps: [io_bound, cpu_bound, balanced]
 storage_codecs: [none, gzip, snappy, lz4, zstd]    # E1: các codec lưu trữ
 shuffle_codecs: ["off", lz4, snappy, zstd]         # E2: các codec shuffle
@@ -200,11 +200,11 @@ sar_texts = {}
 for node in NODES:
     on_node(node, "pkill -INT -x sar; sleep 1")                         # dừng sar (gửi Ctrl-C), đợi nó ghi xong
     sar_texts[node] = {kind: on_node(node, f"sadf -d {sar_file} -- {flags}").stdout
-                       for kind, flags in metrics.SAR_REPORTS.items()}  # xuất 3 bảng CSV
+                       for kind, flags in metrics.SAR_REPORTS.items()}  # xuất 4 bảng CSV
     on_node(node, f"rm -f {sar_file}")
-    … ghi vào results/<env>/sar/<lần đo>/<máy>-cpu.csv, -disk.csv, -net.csv
+    … ghi vào results/<env>/sar/<lần đo>/<máy>-cpu.csv, -mem.csv, -disk.csv, -net.csv
 ```
-`sadf -d <file> -- <loại>`: đọc file nhị phân của sar, xuất **CSV phân cách bằng `;`**, một dòng mỗi giây. Ba loại (`metrics.SAR_REPORTS`): `-u` CPU, `-b` đĩa, `-n DEV` mạng (xem mục 4.2).
+`sadf -d <file> -- <loại>`: đọc file nhị phân của sar, xuất **CSV phân cách bằng `;`**, một dòng mỗi giây. Bốn loại (`metrics.SAR_REPORTS`): `-u` CPU, `-r` bộ nhớ, `-b` đĩa, `-n DEV` mạng. `sar -o` đã ghi sẵn mọi loại vào file; `sadf` chỉ chọn loại cần xuất (xem mục 4.2).
 
 ```python
 row = {"run_id": name, "app": app, "sf": sf, "storage": storage, "shuffle": shuffle, "wall_s": wall_s}
@@ -308,13 +308,16 @@ Stage `SKIPPED`: Spark dùng lại kết quả có sẵn, không chạy, nên kh
 ### 4.2 Từ `sar`
 
 ```python
-SAR_REPORTS = {"cpu": "-u", "disk": "-b", "net": "-n DEV"}
+SAR_REPORTS = {"cpu": "-u", "mem": "-r", "disk": "-b", "net": "-n DEV"}
 ```
 
 Dữ liệu thật (một máy, mỗi giây một dòng):
 ```
 # hostname;interval;timestamp;CPU;%user;%nice;%system;%iowait;%steal;%idle
 worker1;1;2026-11-26 05:23:29 UTC;-1;39.45;0.00;4.52;0.00;0.00;56.03
+
+# hostname;interval;timestamp;kbmemfree;kbavail;kbmemused;%memused;kbbuffers;kbcached;…
+(bộ nhớ: một dòng mỗi giây, cột quan trọng là %memused)
 
 # hostname;interval;timestamp;tps;rtps;wtps;dtps;bread/s;bwrtn/s;bdscd/s
 worker1;1;2026-11-26 05:23:29 UTC;13.00;0.00;13.00;0.00;0.00;137.00;0.00
@@ -328,6 +331,7 @@ worker1;1;2026-11-26 05:23:29 UTC;eth0;1.00;1.00;0.06;0.06;0.00;0.00;0.00;0.00
 | `%user`, `%nice`, `%system` | % CPU chạy chương trình, chương trình ưu tiên thấp, kernel |
 | `%iowait` | % CPU **rảnh vì chờ đĩa** |
 | `%idle` | % CPU rảnh |
+| `%memused` | % RAM đang dùng (không tính buffer/cache của Linux) |
 | `bread/s`, `bwrtn/s` | khối đọc / ghi đĩa mỗi giây (**1 khối = 512 byte**) |
 | `IFACE` | card mạng (`lo` = nội bộ trong máy, bỏ qua; `eth0`/`ens5` = card thật) |
 | `rxkB/s`, `txkB/s` | kB nhận / gửi mỗi giây |
@@ -349,6 +353,7 @@ def sar_summary(per_node):
         cpu = parse_sadf(texts["cpu"])
         busy.append(sum(%user + %nice + %system) / số giây)                  # % CPU bận trung bình của máy
         iowait.append(sum(%iowait) / số giây)
+        mem.append(sum(%memused) / số giây) ; mem_max = max(mem_max, mọi %memused)   # RAM trung bình và đỉnh
         for r in parse_sadf(texts["disk"]):                                  # mỗi giây
             disk_read_bytes  += bread/s × 512        # tốc độ × 1 giây = số byte trong giây đó
             disk_write_bytes += bwrtn/s × 512
@@ -356,7 +361,7 @@ def sar_summary(per_node):
             if r["IFACE"] != "lo":
                 net_rx_bytes += rxkB/s × 1024
                 net_tx_bytes += txkB/s × 1024
-    cpu_busy_pct = trung bình các máy ; cpu_iowait_pct = trung bình các máy
+    cpu_busy_pct, cpu_iowait_pct, mem_used_pct = trung bình các máy ; mem_max_pct = đỉnh trên mọi máy
     (byte đĩa, byte mạng: cộng mọi máy)
 ```
 Vì sar lấy mẫu **mỗi 1 giây**, "tốc độ × 1 giây" cộng qua mọi giây = **tổng số byte** trong cả lần chạy. Đây là số liệu cho **đồ thị đĩa** và **đồ thị mạng**.
@@ -406,25 +411,30 @@ Dùng **chính các lớp codec của Spark** (đúng code nén shuffle), gzip t
 static long[] roundTrip(String codec, byte[] data) throws IOException {
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();          // nén vào RAM
     long t0 = System.nanoTime();
+    long c0 = THREAD.getCurrentThreadCpuTime();                          // thời gian CPU của luồng này
     try (OutputStream out = compress(codec, buffer)) {
         for (int off = 0; off < data.length; off += 65536) {
             out.write(data, off, Math.min(65536, data.length - off));    // ghi từng khúc 64 KB, như khi ghi file
         }
     }
-    long compressNs = System.nanoTime() - t0;                            // thời gian nén
+    long compressNs = System.nanoTime() - t0;                            // thời gian nén (đồng hồ)
+    long compressCpuNs = THREAD.getCurrentThreadCpuTime() - c0;          // thời gian nén (CPU)
 
     byte[] compressed = buffer.toByteArray();                            // compressed.length = kích thước sau nén
-    t0 = System.nanoTime();
+    t0 = System.nanoTime(); c0 = THREAD.getCurrentThreadCpuTime();
     byte[] restored;
     try (InputStream in = decompress(codec, new ByteArrayInputStream(compressed))) {
         restored = in.readAllBytes();                                    // giải nén
     }
     long decompressNs = System.nanoTime() - t0;
+    long decompressCpuNs = THREAD.getCurrentThreadCpuTime() - c0;
     if (!Arrays.equals(data, restored)) throw new IOException(...);      // kiểm tra giải nén đúng
-    return new long[] {compressed.length, compressNs, decompressNs};
+    return new long[] {compressed.length, compressNs, decompressNs, compressCpuNs, decompressCpuNs};
 }
 ```
-`System.nanoTime()`: đồng hồ độ phân giải nano giây. Vì codec chạy một luồng và mọi thứ trong RAM, thời gian đồng hồ ≈ thời gian CPU.
+- `System.nanoTime()`: đồng hồ, độ phân giải nano giây → **tốc độ** (MB/s).
+- `THREAD` = `ManagementFactory.getThreadMXBean()`; `getCurrentThreadCpuTime()`: thời gian CPU mà **luồng này** đã dùng (cả code native của zstd/snappy/zlib, vì chạy trong cùng luồng) → **chi phí CPU** (giây CPU cho mỗi GB). Cùng cơ chế Spark dùng cho `executorCpuTime`.
+- Codec chạy một luồng, mọi thứ trong RAM, nên hai số gần bằng nhau; nếu CPU < đồng hồ nhiều thì máy bị nhiễu (luồng phải chờ).
 
 ```java
 byte[] random = new byte[64 * 1024 * 1024];
@@ -436,11 +446,11 @@ for (String input : inputs.keySet())
         roundTrip(codec, data); roundTrip(codec, data);  // 2 lần khởi động (JIT của Java tối ưu code)
         for (int i = 0; i < 5; i++) {                    // 5 lần đo → raw.csv
             long[] r = roundTrip(codec, data);
-            csv.println(input + "," + codec + "," + i + "," + data.length + "," + r[0] + "," + r[1] + "," + r[2]);
+            csv.println(input + "," + codec + "," + i + "," + data.length + "," + r[0] + "," + r[1] + "," + r[2] + "," + r[3] + "," + r[4]);
         }
     }
 ```
-Đầu vào `random` trả lời: codec tốn bao nhiêu khi nén **vô ích** (dữ liệu đã nén sẵn, ảnh, video), liên quan câu hỏi 7 "khi nào nên tắt nén". `raw.csv`: `input,codec,iteration,input_bytes,compressed_bytes,comp_wall_ns,decomp_wall_ns`.
+Đầu vào `random` trả lời: codec tốn bao nhiêu khi nén **vô ích** (dữ liệu đã nén sẵn, ảnh, video), liên quan câu hỏi 7 "khi nào nên tắt nén". `raw.csv`: `input,codec,iteration,input_bytes,compressed_bytes,comp_wall_ns,decomp_wall_ns,comp_cpu_ns,decomp_cpu_ns`.
 
 ## 6. Kết quả lưu ở đâu
 

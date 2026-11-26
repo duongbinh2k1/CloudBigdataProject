@@ -100,7 +100,7 @@ c0["mb_per_cpu_s"] = moved / 1e6 / c0["cpu_s"]                          # MB di 
 ```
 - `cpu_ratio` gần 1 → task gần như lúc nào cũng dùng CPU (CPU-bound); thấp → task hay phải chờ đĩa/mạng.
 - `mb_per_cpu_s` cao → di chuyển nhiều dữ liệu so với lượng tính toán (I/O-bound); thấp → tính nhiều (CPU-bound).
-- Kèm `cpu_busy_pct`, `cpu_iowait_pct` từ `sar`.
+- Kèm `cpu_busy_pct`, `cpu_iowait_pct`, `mem_used_pct`, `mem_max_pct` từ `sar`.
 
 ## 4. Các đồ thị
 
@@ -131,7 +131,8 @@ for ax, app in zip(axes[0], apps):
 raw = raw[raw["input"] == "csv"]                                  # chỉ dữ liệu lineitem thật
 raw["ratio"] = raw["input_bytes"] / raw["compressed_bytes"]
 raw["comp_mb_s"] = raw["input_bytes"] / raw["comp_wall_ns"] * 1e3  # byte/ns × 1000 = MB/s
-summary = raw.groupby("codec")[["ratio", "comp_mb_s", "decomp_mb_s"]].median()   # trung vị 5 lần
+raw["comp_cpu_s_per_gb"] = raw["comp_cpu_ns"] / raw["input_bytes"]  # ns/byte = giây CPU cho mỗi GB
+summary = raw.groupby("codec")[["ratio", "comp_mb_s", "decomp_mb_s", "comp_cpu_s_per_gb", …]].median()   # trung vị 5 lần
 ax.scatter(comp_mb_s, ratio) ; ax.set_xscale("log")              # mỗi codec một điểm; trục x log
 ```
 Góc **trên phải** là tốt nhất (nén mạnh và nhanh). Trục x dạng log vì tốc độ chênh hơn 10 lần (gzip ~27, lz4 ~360 MB/s).
@@ -147,8 +148,8 @@ Góc **trên phải** là tốt nhất (nén mạnh và nhanh). Trục x dạng 
 | `summary.csv` | trung bình, độ lệch chuẩn, số lần của mọi số đo, cho mọi (app, SF, codec lưu trữ, codec shuffle); thêm `shuffle_fetch_wait_ms` |
 | `speedup.csv` | speedup (%) của mọi codec, cả hai mức |
 | `ratio_storage.csv`, `ratio_shuffle.csv` | tỉ lệ nén |
-| `codec_microbench.csv` | micro-benchmark: tỉ lệ, MB/s nén, MB/s giải nén |
-| `workload_characterisation.csv` | `cpu_ratio`, MB/giây CPU, %CPU, %iowait, shuffle của mỗi app khi không nén |
+| `codec_microbench.csv` | micro-benchmark: tỉ lệ, MB/s nén, MB/s giải nén, giây CPU/GB nén và giải nén |
+| `workload_characterisation.csv` | `cpu_ratio`, MB/giây CPU, %CPU, %iowait, %RAM (trung bình, đỉnh), shuffle của mỗi app khi không nén |
 
 ## 6. Bảy câu hỏi của đề và chỗ lấy số
 

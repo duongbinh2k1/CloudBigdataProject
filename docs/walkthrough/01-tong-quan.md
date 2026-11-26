@@ -218,7 +218,7 @@ run_experiments.py (trên master)
  8. Nghỉ 3 giây cho cluster "lắng xuống", sang lần đo tiếp theo
 ```
 
-Sau 540 (hoặc 324…) lần như vậy, `runs.csv` có đủ dữ liệu để vẽ mọi đồ thị.
+Sau 324 lần như vậy (cấu hình AWS chính thức), `runs.csv` có đủ dữ liệu để vẽ mọi đồ thị.
 
 ## 7. Bảng lệnh
 

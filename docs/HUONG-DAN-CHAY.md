@@ -143,13 +143,13 @@ aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A 
 
 Hai file quyết định đợt đo:
 
-| File | Dòng | Thử nghiệm nhỏ (hiện tại) | Đợt đo chính thức (ví dụ) |
+| File | Dòng | Đợt đo chính thức (hiện tại) | Thử nghiệm nhỏ (nếu muốn thử trước) |
 |---|---|---|---|
-| `infra/terraform/variables.tf` | `worker_count` | `3` | `7` |
-| `bench/experiments-aws.yaml` | `sizes` | `[1]` | `[1, 5, 10, 20]` |
-| `bench/experiments-aws.yaml` | `repetitions` | `1` | `3` |
+| `infra/terraform/variables.tf` | `worker_count` | `7` | `3` |
+| `bench/experiments-aws.yaml` | `sizes` | `[1, 5, 10, 20]` | `[1]` |
+| `bench/experiments-aws.yaml` | `repetitions` | `3` | `1` |
 
-Nên chạy **thử nghiệm nhỏ trước** (khoảng 1–2 giờ, 1–2 USD credit) để chắc mọi thứ chạy, rồi mới chạy đợt chính thức (nhiều giờ).
+Hiện đặt sẵn đợt chính thức: 324 lần chạy, khoảng 18–24 giờ, khoảng 20–30 USD credit (chi tiết: [AWS.md](AWS.md)). Thử nghiệm nhỏ đã chạy thành công một lần (`results/aws-test/`); muốn thử lại thì đổi sang cột bên phải (khoảng 1–2 giờ).
 
 ### 5.2 Dựng cluster
 
