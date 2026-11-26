@@ -1,22 +1,19 @@
 ---
-# Installs and starts HDFS + Spark on the EC2 nodes, with the scripts of cluster/
+# Installs and starts HDFS + Spark on the machines created by Terraform (list in inventory.ini)
 - name: Wait until the new machines accept SSH
   hosts: all
   gather_facts: false
   tasks:
-    - name: Wait for SSH
-      ansible.builtin.wait_for_connection:
-        timeout: 300
+    - ansible.builtin.wait_for_connection: {timeout: 300}
 
-- name: Every node
+- name: Every machine
   hosts: all
   become: true
   tasks:
-    - name: Hostname = name in the inventory
-      ansible.builtin.hostname:
-        name: "{{ inventory_hostname }}"
+    - name: Hostname = name in the inventory (master, worker1...)
+      ansible.builtin.hostname: {name: "{{ inventory_hostname }}"}
 
-    - name: /etc/hosts with the private IP of every node
+    - name: /etc/hosts with the private IP of every machine, so that they call each other by name
       ansible.builtin.copy:
         dest: /etc/hosts
         content: |
@@ -25,73 +22,59 @@
           {{ hostvars[host].private_ip }} {{ host }}
           {% endfor %}
 
-    - name: No automatic updates during the measurements
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        state: stopped
-        enabled: false
+    - name: No automatic Ubuntu updates during the measurements
+      ansible.builtin.systemd: {name: "{{ item }}", state: stopped, enabled: false}
       loop: [unattended-upgrades.service, apt-daily.timer, apt-daily-upgrade.timer]
       failed_when: false
 
-    - name: Copy the installation script and the configuration (cluster/)
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../cluster/"
-        dest: /opt/cluster/
+    - name: Copy cluster/ (installation script and configuration files)
+      ansible.builtin.copy: {src: "{{ playbook_dir }}/../../cluster/", dest: /opt/cluster/}
 
-    - name: Install Java, Hadoop and Spark (the same script as the local containers)
-      ansible.builtin.command: bash /opt/cluster/install.sh ubuntu
+    - name: Install Java, Hadoop and Spark
+      ansible.builtin.command: bash /opt/cluster/install.sh
 
-    - name: List of workers for start-dfs.sh and start-workers.sh
+    - name: List of the workers, read by start-dfs.sh, start-workers.sh and run_experiments.py
       ansible.builtin.copy:
         dest: "{{ item }}"
-        owner: ubuntu
         content: "{{ groups['workers'] | join('\n') }}\n"
       loop: [/opt/hadoop/etc/hadoop/workers, /opt/spark/conf/workers]
 
-- name: Passwordless SSH from the master to every node (start-*.sh scripts, run_experiments.py)
+- name: SSH without password from the master to every machine
   hosts: all
   become: true
   become_user: ubuntu
   tasks:
-    - name: SSH key of the master
+    - name: Key pair of the master
       ansible.builtin.command: ssh-keygen -t ed25519 -N "" -f /home/ubuntu/.ssh/id_ed25519
       args: {creates: /home/ubuntu/.ssh/id_ed25519}
       when: inventory_hostname == 'master'
 
-    - name: Read the master's public key
+    - name: Read the public key of the master
       ansible.builtin.slurp: {src: /home/ubuntu/.ssh/id_ed25519.pub}
       register: master_key
       when: inventory_hostname == 'master'
 
-    - name: Authorize it on every node
-      ansible.posix.authorized_key:
-        user: ubuntu
-        key: "{{ hostvars['master'].master_key.content | b64decode }}"
+    - name: Add it to authorized_keys on every machine
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.ssh/authorized_keys
+        line: "{{ hostvars['master'].master_key.content | b64decode | trim }}"
 
-    - name: Accept the host keys of new nodes
+    - name: The master accepts the host key of a machine the first time it sees it
       ansible.builtin.copy:
         dest: /home/ubuntu/.ssh/config
         mode: "0600"
-        content: |
-          Host *
-            StrictHostKeyChecking accept-new
+        content: "Host *\n  StrictHostKeyChecking accept-new\n"
       when: inventory_hostname == 'master'
 
-- name: Start HDFS and Spark from the master
+- name: Start the cluster and copy the project code
   hosts: master
   become: true
   become_user: ubuntu
   tasks:
-    - name: Start the cluster (the same script as the local containers)
+    - name: Start HDFS and Spark
       ansible.builtin.command: bash -l /opt/cluster/start-cluster.sh
 
-    - name: Copy the project code (java/, bench/)
-      ansible.posix.synchronize:
-        src: "{{ playbook_dir }}/../../{{ item }}"
-        dest: /opt/work/
-      loop: [java, bench]
-      become: false
-
-    - name: Build the jar
-      ansible.builtin.command: bash -l java/build.sh
-      args: {chdir: /opt/work}
+    - name: Copy the code to /opt/work (only the files of the project)
+      ansible.builtin.copy: {src: "{{ playbook_dir }}/../../{{ item }}", dest: "/opt/work/{{ item | dirname }}/"}
+      loop: [java/src, java/build.sh, bench/experiments.yaml, bench/run_all.sh, bench/run_experiments.py,
+             bench/CodecBench.java]

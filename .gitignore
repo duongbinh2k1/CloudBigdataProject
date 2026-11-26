@@ -1,34 +1,23 @@
 # Python
 __pycache__/
-*.pyc
 .venv/
-.ipynb_checkpoints/
 
-# Local cluster state / downloads
-dev/volumes/
-*.tgz
-*.tar.gz
+# Build
+java/build/
 
-# Terraform
+# Terraform state and the files it generates
 infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
-infra/terraform/*.tfvars
-!infra/terraform/*.tfvars.example
-
-# Secrets
-*.pem
-.env
-
-# OS
-.DS_Store
-bench/.samples/
 infra/ansible/inventory.ini
 
-# Results and figures of the test runs on the local cluster (not for the report)
+# Results of the old version of the project (local containers, first AWS test): not for the report
 results/dev/
-analysis/figures/dev/
-# Test run on the Free plan machines (m7i-flex.large, SF 1, 1 repetition): not for the report
 results/aws-test/
+analysis/figures/dev/
 analysis/figures/aws-test/
-java/build/
+
+.DS_Store
+
+# local samples (not part of the project)
+bench/.samples/

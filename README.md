@@ -1,50 +1,53 @@
 # Experimental Evaluation of Data Compression in Spark
 
-InfraCloud project (USTH / INP-ENSEEIHT). We measure the effect of compression
-(Gzip, Snappy, LZ4, Zstd, none) in Spark at two levels:
+InfraCloud project (USTH / INP-ENSEEIHT). We measure the gain and the cost of compression in Spark
+at two levels:
 
-- **storage**: text files on HDFS written with a Hadoop codec,
+- **storage**: text files on HDFS compressed with a Hadoop codec,
 - **communication**: shuffle data compressed by Spark,
 
-with three applications (I/O-bound, CPU-bound, balanced) and four dataset sizes.
+with three applications (I/O-bound, CPU-bound, balanced) and four dataset sizes (1, 5, 10, 20 GB),
+on a cluster of 8 EC2 machines (1 master + 7 workers).
 
-Java 11, Hadoop 3.4.1 (HDFS), Spark 3.5.5 standalone, Spark jobs in Java (RDD), Python 3 for the
-experiment script and the plots, sysstat (`sar`).
+Codecs: the four codecs of the assignment (Gzip, Snappy, LZ4, Zstd) are first compared on one machine
+(`bench/CodecBench.java`). The cluster experiments then use the two ends of the trade-off, both
+available for files and for the shuffle: **LZ4** (fast, ratio ~1.9) and **Zstd** (ratio ~3.1), against no compression.
+
+Software: Java 11, Hadoop 3.4.1 (HDFS only), Spark 3.5.5 standalone, Spark jobs in Java (RDD API).
+Tools: Terraform (machines), Ansible (installation), `sar` + Spark History Server (measurements),
+Python (experiment script, figures).
 
 | Folder | Content |
 |---|---|
-| `java/` | data generator and the 3 Spark applications, `build.sh` |
-| `bench/` | `run_experiments.py` + `metrics.py`, the experiment files (YAML), `CodecBench.java` |
+| `infra/terraform/` | the AWS machines: network, firewall, 1 master + 7 workers `m7i-flex.large` |
+| `infra/ansible/` | `cluster.yml`: installs and starts HDFS + Spark on the machines |
+| `cluster/` | installation script, Hadoop and Spark configuration, start script |
+| `java/src/compression/` | data generator (`DataGen`), the 3 apps (`IoBound`, `CpuBound`, `Balanced`), `Util` |
+| `bench/` | `experiments.yaml` (design), `run_all.sh` (whole study), `run_experiments.py` (runs + metrics), `CodecBench.java` |
 | `analysis/` | `report.py`: figures and tables |
-| `cluster/` | the same for the local cluster and EC2: `install.sh` (Java, Hadoop, Spark), `start-cluster.sh` (start-dfs.sh, start-workers.sh…), configuration files |
-| `dev/` | local cluster: Ubuntu containers installed and started with the scripts of `cluster/` (master + 2 workers) |
-| `infra/` | Terraform (EC2) and Ansible (`cluster.yml`) |
-| `results/` | raw results |
-| `docs/` | how to run (`HUONG-DAN-CHAY.md`), study guide (`GUIDE.md`), line-by-line walkthrough (`walkthrough/`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |
+| `results/` | raw measurements: `runs.csv`, `sar/`, `datasets/`, `codec_bench.csv` |
+| `docs/GIAI-THICH.md` | full explanation of the project and defence questions (Vietnamese) |
 
-## How to run
+## Requirements (once)
 
-Step-by-step guide from an empty laptop (tools, `aws configure`, local run, AWS run, troubleshooting): [docs/HUONG-DAN-CHAY.md](docs/HUONG-DAN-CHAY.md).
+- An AWS account with 16 vCPU of quota in Sydney (`ap-southeast-2`), and an IAM user's access key:
+  `aws configure` (region `ap-southeast-2`).
+- On the laptop: `brew install terraform ansible awscli`, and Python 3.
 
-All commands run on the laptop. `ENV=dev` (default) is the local cluster in containers, `ENV=aws`
-the EC2 cluster. The same script, `bench/run_all.sh`, does the work on the master node in both cases:
-build the jar, generate the datasets, codec micro-benchmark, then the experiments of
-`bench/experiments-<env>.yaml` (steps already done are skipped).
+## Run
 
-| | Local | AWS |
-|---|---|---|
-| Start the cluster | `make up` | `make up ENV=aws` (Terraform + Ansible) |
-| Run everything | `make run` | `make run ENV=aws` (in tmux on the master, the laptop can be turned off) |
-| Progress | `make status` | `make status ENV=aws` |
-| Get the results | `make fetch` (nothing to do) | `make fetch ENV=aws` |
-| Figures and tables | `make analysis` | `make analysis ENV=aws` |
-| Shell on the master | `make shell` | `make shell ENV=aws` (also opens the web UIs on localhost) |
-| Stop | `make down` | `make down ENV=aws` (deletes the EC2 cluster) |
+All commands run on the laptop, in this folder.
 
-`make analysis` creates the Python environment (`.venv`) the first time. `make up ENV=aws` creates
-the SSH key `~/.ssh/cloud-bigdata-project` if needed and only allows SSH from your current public IP.
+| Command | What it does |
+|---|---|
+| `make up` | Terraform creates the machines, Ansible installs and starts HDFS + Spark (~15 min) |
+| `make run` | starts the whole study on the master in `tmux` (build, datasets, codec benchmark, 216 runs; about 14-17 h). The laptop can be turned off |
+| `make status` | last lines of the log and number of runs done |
+| `make fetch` | copies the results of the master to `results/` (do it regularly) |
+| `make analysis` | figures in `analysis/figures/`, tables in `analysis/tables/` |
+| `make shell` | shell on the master; web UIs: HDFS http://localhost:9870, Spark http://localhost:8080, History Server http://localhost:18080 |
+| `make down` | deletes every AWS resource. **The cluster costs about 1.1 USD per hour, even when idle** |
 
-Web UIs: HDFS http://localhost:9870, Spark http://localhost:8080, History Server http://localhost:18080.
-
-Before the first `make up ENV=aws`: an AWS account with 16 vCPU of quota, `aws configure`,
-`brew install terraform ansible`. Checklist and cost: [docs/AWS.md](docs/AWS.md).
+If the run stops, `make run` again: the runs already in `results/runs.csv` are skipped.
+After a change in the code or in `bench/experiments.yaml`: `make up` (copies the code again), then `make run`.
+`make up` restarts HDFS and Spark: never run it while a study is running.

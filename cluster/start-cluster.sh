@@ -1,5 +1,5 @@
 #!/bin/bash
-# Starts HDFS and Spark from the master (local containers and EC2)
+# Starts HDFS, Spark and the History Server, from the master (run by Ansible)
 set -e
 
 # HDFS: format the NameNode the first time only, then (re)start it

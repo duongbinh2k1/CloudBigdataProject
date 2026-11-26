@@ -1,163 +1,180 @@
-"""Runs the experiments of a YAML file: python3 bench/run_experiments.py <config> <results dir>"""
-import argparse
+"""Runs every experiment of bench/experiments.yaml and adds one line per run to results/runs.csv.
+On the master, in /opt/work: python3 bench/run_experiments.py   (runs already in runs.csv are skipped)
+
+For each run: drop the page cache and start `sar` on every node, spark-submit the app, stop `sar`,
+then read the metrics of the run from the Spark History Server and from `sar`.
+"""
 import csv
+import json
 import random
+import re
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 
 import yaml
 
-import metrics
-
-JAR = "java/build/cloud-bigdata-project.jar"
+CONFIG = yaml.safe_load(Path("bench/experiments.yaml").read_text())
+RESULTS = Path("results")
+JAR = "java/build/app.jar"
 DATA = "hdfs://master:9000/data"
-OUTPUT = "hdfs://master:9000/results"
-HISTORY = "http://master:18080"
-WORKERS_FILE = "/opt/spark/conf/workers"
-CLASSES = {"io_bound": "compression.apps.IoBound",
-           "cpu_bound": "compression.apps.CpuBound",
-           "balanced": "compression.apps.Balanced"}
-COLUMNS = (["run_id", "status", "app", "sf", "storage", "shuffle", "rep", "wall_s", "output_hdfs_bytes"]
-           + metrics.SPARK_COLUMNS + metrics.SAR_COLUMNS)
+OUTPUT = "hdfs://master:9000/output"
+HISTORY = "http://master:18080/api/v1/applications"
+NODES = ["master"] + Path("/opt/spark/conf/workers").read_text().split()
+CLASSES = {"io_bound": "compression.IoBound", "cpu_bound": "compression.CpuBound", "balanced": "compression.Balanced"}
+
+# metric in the History Server (sum over the stages of the app) -> column of runs.csv
+SPARK_METRICS = {
+    "executorRunTime": "executor_run_ms",        # time spent by the tasks
+    "executorCpuTime": "executor_cpu_ns",        # CPU time of the tasks
+    "jvmGcTime": "gc_ms",
+    "inputBytes": "input_bytes",                 # read from HDFS (compressed size)
+    "outputBytes": "output_bytes",               # written to HDFS
+    "shuffleWriteBytes": "shuffle_write_bytes",  # shuffle data written by the map tasks (compressed size)
+    "shuffleReadBytes": "shuffle_read_bytes",
+    "shuffleRemoteBytesRead": "shuffle_remote_read_bytes",   # the part that came over the network
+    "shuffleWriteTime": "shuffle_write_ns",      # shuffle time = write time + fetch wait time
+    "shuffleFetchWaitTime": "shuffle_fetch_wait_ms",
+    "diskBytesSpilled": "spill_bytes",
+}
+SAR_METRICS = ["cpu_busy_pct", "cpu_iowait_pct", "mem_used_pct", "disk_read_bytes", "disk_write_bytes",
+               "net_rx_bytes", "net_tx_bytes"]
+COLUMNS = (["run_id", "status", "app", "sf", "storage", "shuffle", "rep", "time_s"]
+           + list(SPARK_METRICS.values()) + SAR_METRICS)
 
 
-def configurations(cfg):
-    pairs = {(s, "off") for s in cfg["storage_codecs"]}            # E1
-    pairs |= {("none", s) for s in cfg["shuffle_codecs"]}          # E2
-    if cfg.get("combined"):                                        # E3
-        x, y = cfg["combined"]["storage"], cfg["combined"]["shuffle"]
-        pairs |= {("none", "off"), (x, "off"), ("none", y), (x, y)}
-    return pairs
+def configurations():
+    """(storage codec, shuffle codec) pairs: E1, E2 and C0-C3 of E3 (each pair is run only once)."""
+    pairs = {(codec, "off") for codec in CONFIG["storage_codecs"]}           # E1: storage only
+    pairs |= {("none", codec) for codec in CONFIG["shuffle_codecs"]}         # E2: shuffle only
+    x, y = CONFIG["combined"]["storage"], CONFIG["combined"]["shuffle"]      # E3: C0, C1, C2, C3
+    pairs |= {("none", "off"), (x, "off"), ("none", y), (x, y)}
+    return sorted(pairs)
 
 
-def run_list(cfg):
-    runs = [(app, sf, storage, shuffle, rep)
-            for app in cfg["apps"]
-            for sf in cfg["sizes"]
-            for storage, shuffle in sorted(configurations(cfg))
-            for rep in range(1, cfg["repetitions"] + 1)]
-    random.Random(cfg["seed"]).shuffle(runs)
-    return runs
-
-
-def run_id(app, sf, storage, shuffle, rep):
-    return f"{app}_sf{sf:g}_{storage}_{shuffle}_r{rep}"
-
-
-def submit_command(cfg, app, sf, storage, shuffle, output):
+def spark_submit(app, sf, storage, shuffle, output):
     if shuffle == "off":
-        shuffle_conf = {"spark.shuffle.compress": "false", "spark.shuffle.spill.compress": "false"}
-    else:   # lz4, snappy, zstd (Spark has no gzip for shuffle)
-        shuffle_conf = {"spark.shuffle.compress": "true", "spark.shuffle.spill.compress": "true",
-                        "spark.io.compression.codec": shuffle}
-    cmd = ["spark-submit", "--class", CLASSES[app]]
-    for key, value in shuffle_conf.items():
-        cmd += ["--conf", f"{key}={value}"]
-    data = f"{DATA}/sf{sf:g}/{storage}"
-    if app == "balanced":
-        args = [f"{data}/lineitem", f"{data}/orders", output, storage]
-    else:
-        args = [f"{data}/lineitem", output, storage]
-    rounds = cfg.get("rounds", {}).get(app)
-    return cmd + [JAR] + args + ([str(rounds)] if rounds else [])
-
-
-def cluster_nodes():
-    if Path(WORKERS_FILE).exists():
-        return ["master"] + Path(WORKERS_FILE).read_text().split(), True
-    return ["master"], False
-
-
-NODES, USE_SSH = cluster_nodes()
+        conf = ["spark.shuffle.compress=false", "spark.shuffle.spill.compress=false"]
+    else:      # COMMUNICATION COMPRESSION: lz4, snappy or zstd (Spark has no gzip for the shuffle)
+        conf = ["spark.shuffle.compress=true", "spark.shuffle.spill.compress=true",
+                f"spark.io.compression.codec={shuffle}"]
+    data = f"{DATA}/sf{sf}/{storage}"
+    inputs = [f"{data}/lineitem", f"{data}/orders"] if app == "balanced" else [f"{data}/lineitem"]
+    command = ["spark-submit", "--class", CLASSES[app]]
+    for setting in conf:
+        command += ["--conf", setting]
+    return command + [JAR] + inputs + [output, storage]
 
 
 def on_node(node, command):
-    argv = ["ssh", node, command] if USE_SSH else ["sh", "-c", command]
-    return subprocess.run(argv, capture_output=True, text=True)
+    return subprocess.run(["ssh", node, command], capture_output=True, text=True).stdout
 
 
-def run_once(cfg, app, sf, storage, shuffle, name, out_dir):
-    output = f"{OUTPUT}/{name}"
-    sar_file = f"/tmp/sar-{name}.bin"
-    for node in NODES:
-        if on_node(node, "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches").returncode != 0:
-            print(f"  warning: could not drop the page cache on {node}")
-        on_node(node, f"nohup sar -o {sar_file} 1 >/dev/null 2>&1 &")
+def spark_metrics(app_id):
+    url = f"{HISTORY}/{app_id}"
+    for _ in range(90):           # the History Server reads the event log a few seconds after the end
+        try:
+            with urllib.request.urlopen(url) as response:
+                app = json.load(response)
+            if app["attempts"][-1]["completed"]:
+                break
+        except (OSError, ValueError):
+            pass
+        time.sleep(2)
+    else:
+        raise TimeoutError(f"no metrics for {app_id} in the History Server")
+    with urllib.request.urlopen(url + "/stages") as response:
+        stages = [s for s in json.load(response) if s["status"] == "COMPLETE"]
+    row = {"time_s": app["attempts"][-1]["duration"] / 1000}
+    for field, column in SPARK_METRICS.items():
+        row[column] = sum(stage[field] for stage in stages)
+    return row
 
-    start = time.time()
-    proc = subprocess.run(submit_command(cfg, app, sf, storage, shuffle, output), capture_output=True, text=True)
-    wall_s = round(time.time() - start, 3)
 
-    sar_texts = {}
-    for node in NODES:
-        on_node(node, "pkill -INT -x sar; sleep 1")
-        sar_texts[node] = {kind: on_node(node, f"sadf -d {sar_file} -- {flags}").stdout
-                           for kind, flags in metrics.SAR_REPORTS.items()}
-        on_node(node, f"rm -f {sar_file}")
-        sar_dir = out_dir / "sar" / name
-        sar_dir.mkdir(parents=True, exist_ok=True)
-        for kind, text in sar_texts[node].items():
-            (sar_dir / f"{node}-{kind}.csv").write_text(text)
+def sar_metrics(sar_csv):
+    """sar_csv: node -> output of `sadf -d` (one line per second). CPU and memory: mean over the nodes;
+    disk and network: bytes summed over the nodes (rate per second x 1 second)."""
+    busy, iowait, mem = [], [], []
+    total = {"disk_read_bytes": 0, "disk_write_bytes": 0, "net_rx_bytes": 0, "net_tx_bytes": 0}
+    for text in sar_csv.values():
+        header = []
+        for line in text.splitlines():
+            if line.startswith("#"):                 # each report (-u, -r, -b, -n DEV) has its header
+                header = line[1:].strip().split(";")
+                continue
+            r = dict(zip(header, line.split(";")))
+            if "%user" in r:
+                busy.append(float(r["%user"]) + float(r["%nice"]) + float(r["%system"]))
+                iowait.append(float(r["%iowait"]))
+            elif "%memused" in r:
+                mem.append(float(r["%memused"]))
+            elif "bread/s" in r:                     # blocks of 512 bytes
+                total["disk_read_bytes"] += float(r["bread/s"]) * 512
+                total["disk_write_bytes"] += float(r["bwrtn/s"]) * 512
+            elif r.get("IFACE", "lo") != "lo":
+                total["net_rx_bytes"] += float(r["rxkB/s"]) * 1024
+                total["net_tx_bytes"] += float(r["txkB/s"]) * 1024
 
-    row = {"run_id": name, "app": app, "sf": sf, "storage": storage, "shuffle": shuffle, "wall_s": wall_s}
-    if proc.returncode != 0:
-        (out_dir / "logs").mkdir(exist_ok=True)
-        (out_dir / "logs" / f"{name}.log").write_text(proc.stderr)
+    def mean(values):
+        return round(sum(values) / len(values), 2) if values else ""
+
+    return {"cpu_busy_pct": mean(busy), "cpu_iowait_pct": mean(iowait), "mem_used_pct": mean(mem),
+            **{k: int(v) for k, v in total.items()}}
+
+
+def run_once(app, sf, storage, shuffle, run_id):
+    for node in NODES:   # empty the page cache (data really read from disk), then 1 sar sample per second
+        on_node(node, "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; "
+                      "rm -f /tmp/sar.bin; nohup sar -o /tmp/sar.bin 1 >/dev/null 2>&1 &")
+    output = f"{OUTPUT}/{run_id}"
+    proc = subprocess.run(spark_submit(app, sf, storage, shuffle, output), capture_output=True, text=True)
+    sar_csv = {node: on_node(node, "pkill -INT -x sar; sleep 1; sadf -d /tmp/sar.bin -- -u -r -b -n DEV")
+               for node in NODES}
+
+    raw = RESULTS / "sar" / run_id                  # raw measurements, kept for the report
+    raw.mkdir(parents=True, exist_ok=True)
+    for node, text in sar_csv.items():
+        (raw / f"{node}.csv").write_text(text)
+
+    row = {"run_id": run_id, "app": app, "sf": sf, "storage": storage, "shuffle": shuffle}
+    app_id = re.search(r"APP_ID=(\S+)", proc.stdout)
+    if proc.returncode != 0 or not app_id:
+        (RESULTS / "logs").mkdir(exist_ok=True)
+        (RESULTS / "logs" / f"{run_id}.log").write_text(proc.stderr)
         return {**row, "status": "failed"}
-
-    app_id = next(line.split("=")[1] for line in proc.stdout.splitlines() if line.startswith("APP_ID="))
-    du = subprocess.run(["hdfs", "dfs", "-du", "-s", output], capture_output=True, text=True).stdout
     subprocess.run(["hdfs", "dfs", "-rm", "-r", "-skipTrash", output], capture_output=True)
-    return {**row, "status": "ok", "output_hdfs_bytes": int(du.split()[0]),
-            **metrics.spark_metrics(HISTORY, app_id), **metrics.sar_summary(sar_texts)}
+    return {**row, "status": "ok", **spark_metrics(app_id.group(1)), **sar_metrics(sar_csv)}
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config", type=Path)
-    parser.add_argument("results", type=Path)
-    parser.add_argument("--limit", type=int)
-    args = parser.parse_args()
-
-    cfg = yaml.safe_load(args.config.read_text())
-    out_dir = args.results
-    out_dir.mkdir(parents=True, exist_ok=True)
-    runs_csv = out_dir / "runs.csv"
-    # new sizes, codecs or repetitions are added to runs.csv, but not a different workload
-    old = out_dir / "config.yaml"
-    if runs_csv.exists() and old.exists() and yaml.safe_load(old.read_text()).get("rounds") != cfg.get("rounds"):
-        raise SystemExit(f"rounds changed since the runs in {runs_csv}: move {out_dir} away to start again")
-    old.write_text(args.config.read_text())
-
+    runs_csv = RESULTS / "runs.csv"
     done = set()
     if runs_csv.exists():
         with runs_csv.open() as f:
             done = {r["run_id"] for r in csv.DictReader(f) if r["status"] == "ok"}
     else:
-        with runs_csv.open("w", newline="") as f:
-            csv.writer(f, lineterminator="\n").writerow(COLUMNS)
+        RESULTS.mkdir(exist_ok=True)
+        runs_csv.write_text(",".join(COLUMNS) + "\n")
 
-    todo = [r for r in run_list(cfg) if run_id(*r) not in done][:args.limit]
-    print(f"{len(done)} runs already done, {len(todo)} to run")
-    if not todo:
-        return
+    # every (app, size, configuration, repetition), in a random order fixed by the seed, so that a slow
+    # period of the cluster does not always fall on the same codec
+    runs = [(app, sf, storage, shuffle, rep) for app in CONFIG["apps"] for sf in CONFIG["sizes"]
+            for storage, shuffle in configurations() for rep in range(1, CONFIG["repetitions"] + 1)]
+    random.Random(CONFIG["seed"]).shuffle(runs)
+    todo = [r for r in runs if "{}_sf{}_{}_{}_r{}".format(*r) not in done]
+    print(f"{len(done)} runs done, {len(todo)} to run", flush=True)
 
-    for app in cfg["apps"]:   # one warm-up run per app, not recorded
-        sf = min(cfg["sizes"])
-        name = f"warmup_{app}"
-        subprocess.run(submit_command(cfg, app, sf, "none", "off", f"{OUTPUT}/{name}"), capture_output=True)
-        subprocess.run(["hdfs", "dfs", "-rm", "-r", "-skipTrash", f"{OUTPUT}/{name}"], capture_output=True)
-        print(f"warm-up {app} done")
+    for app in CONFIG["apps"]:        # one warm-up run per app (JVM, HDFS), not recorded
+        if todo:
+            run_once(app, CONFIG["sizes"][0], "none", "off", f"warmup_{app}")
 
     for i, (app, sf, storage, shuffle, rep) in enumerate(todo, 1):
-        name = run_id(app, sf, storage, shuffle, rep)
-        row = run_once(cfg, app, sf, storage, shuffle, name, out_dir)
-        row["rep"] = rep
+        run_id = f"{app}_sf{sf}_{storage}_{shuffle}_r{rep}"
+        row = {**run_once(app, sf, storage, shuffle, run_id), "rep": rep}
         with runs_csv.open("a", newline="") as f:
             csv.DictWriter(f, fieldnames=COLUMNS, lineterminator="\n").writerow(row)
-        print(f"[{i}/{len(todo)}] {name}: {row['status']} in {row['wall_s']} s", flush=True)
-        time.sleep(3)   # let the cluster settle
+        print(f"[{i}/{len(todo)}] {run_id}: {row['status']} {row.get('time_s', '')}", flush=True)
 
 
 if __name__ == "__main__":

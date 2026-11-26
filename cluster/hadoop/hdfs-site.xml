@@ -3,6 +3,6 @@
   <!-- keep HDFS data in /data (the default is /tmp) -->
   <property><name>dfs.namenode.name.dir</name><value>file:///data/hdfs/namenode</value></property>
   <property><name>dfs.datanode.data.dir</name><value>file:///data/hdfs/datanode</value></property>
-  <!-- the local containers have no reverse DNS -->
+  <!-- the DataNodes are known by the names of /etc/hosts: no reverse DNS check -->
   <property><name>dfs.namenode.datanode.registration.ip-hostname-check</name><value>false</value></property>
 </configuration>
