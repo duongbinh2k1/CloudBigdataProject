@@ -1,4 +1,4 @@
-# Small test on the local cluster (machines: dev/compose.yml, resources: dev/conf/spark/)
+# Small test on the local cluster (dev/compose.yml)
 seed: 1
 repetitions: 1
 sizes: [0.1]

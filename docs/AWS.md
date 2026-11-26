@@ -44,7 +44,7 @@ Sửa code sau khi cluster đã chạy: chạy lại `make up ENV=aws` (Terrafor
 | Kích thước dữ liệu, codec, số lần lặp, ứng dụng, cặp codec E3 | `bench/experiments-aws.yaml` | `make up ENV=aws` (copy file lên), `make run ENV=aws` |
 | Độ nặng CPU của app (`rounds`) | `bench/experiments-aws.yaml` | như trên, nhưng trước đó chuyển `results/aws` đi chỗ khác: script từ chối trộn kết quả của hai workload khác nhau |
 
-Không phải sửa gì khác: Ansible tự tính core, RAM của executor, `parallelism` (số worker × core × 4) và số bản sao HDFS từ máy thật; danh sách máy cho `sar` lấy từ danh sách worker của Spark. Cấu hình Spark thực tế của mỗi lần chạy được ghi trong `runs.csv` (`executor_cores`, `executor_memory`, `default_parallelism`).
+Không phải sửa gì khác: Spark dùng mặc định (hết core của mỗi worker, executor 1 GB, số partition = tổng số core), tự theo máy mới; danh sách máy cho `sar` lấy từ danh sách worker của Spark.
 
 Thêm kích thước, codec hay số lần lặp thì chỉ các lần chạy mới được chạy thêm; các lần đã `ok` được giữ lại.
 

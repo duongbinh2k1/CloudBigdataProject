@@ -75,19 +75,14 @@
           export SPARK_HOME=/opt/spark
           export PATH=/opt/spark/bin:/opt/spark/sbin:/opt/hadoop/bin:/opt/hadoop/sbin:$PATH
 
-    - name: Hadoop configuration
-      ansible.builtin.template:
-        src: "templates/{{ item }}"
-        dest: "/opt/hadoop/etc/hadoop/{{ item }}"
+    - name: Hadoop and Spark configuration (the same files as the local cluster, in conf/)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../conf/{{ item.src }}/"
+        dest: "{{ item.dest }}"
         owner: ubuntu
-      loop: [core-site.xml, hdfs-site.xml, hadoop-env.sh]
-
-    - name: Spark configuration
-      ansible.builtin.template:
-        src: "templates/{{ item }}"
-        dest: "/opt/spark/conf/{{ item }}"
-        owner: ubuntu
-      loop: [spark-env.sh, spark-defaults.conf]
+      loop:
+        - {src: hadoop, dest: /opt/hadoop/etc/hadoop/}
+        - {src: spark, dest: /opt/spark/conf/}
 
     - name: List of workers for start-dfs.sh and start-workers.sh
       ansible.builtin.copy:
@@ -96,18 +91,12 @@
         content: "{{ groups['workers'] | join('\n') }}\n"
       loop: [/opt/hadoop/etc/hadoop/workers, /opt/spark/conf/workers]
 
-    - name: Directories (HDFS blocks, shuffle files, project code)
+    - name: Directories (HDFS data, project code)
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
         owner: ubuntu
-      loop: [/data/hdfs, /data/spark-local, /opt/work]
-
-    - name: No periodic sysstat collection (sar is started by the experiment script)
-      ansible.builtin.systemd:
-        name: sysstat
-        state: stopped
-        enabled: false
+      loop: [/data/hdfs, /opt/work]
 
     # zstd needs Hadoop's native library
     - name: hadoop checknative must report zstd = true

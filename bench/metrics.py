@@ -18,13 +18,7 @@ STAGE_FIELDS = {
     "diskBytesSpilled": "disk_spill_bytes",
     "memoryBytesSpilled": "memory_spill_bytes",
 }
-# Spark settings actually used by the application (from the History Server, not from our files)
-SETTINGS = {
-    "spark.executor.cores": "executor_cores",
-    "spark.executor.memory": "executor_memory",
-    "spark.default.parallelism": "default_parallelism",
-}
-SPARK_COLUMNS = ["app_id", "duration_ms"] + list(STAGE_FIELDS.values()) + list(SETTINGS.values())
+SPARK_COLUMNS = ["app_id", "duration_ms"] + list(STAGE_FIELDS.values())
 SAR_COLUMNS = ["cpu_busy_pct", "cpu_iowait_pct", "disk_read_bytes", "disk_write_bytes",
                "net_rx_bytes", "net_tx_bytes"]
 SAR_REPORTS = {"cpu": "-u", "disk": "-b", "net": "-n DEV"}
@@ -55,9 +49,6 @@ def spark_metrics(history_url, app_id, timeout_s=180):
     counted = [s for s in stages if s["status"] in ("COMPLETE", "FAILED")]   # not SKIPPED
     for field, column in STAGE_FIELDS.items():
         row[column] = sum(s.get(field, 0) for s in counted)
-    properties = dict(get_json(url + "/environment")["sparkProperties"])
-    for key, column in SETTINGS.items():
-        row[column] = properties.get(key, "")
     return row
 
 

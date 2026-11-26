@@ -16,7 +16,8 @@ experiment script and the plots, sysstat (`sar`).
 | `java/` | data generator and the 3 Spark applications, `build.sh` |
 | `bench/` | `run_experiments.py` + `metrics.py`, the experiment files (YAML), `CodecBench.java` |
 | `analysis/` | `report.py`: figures and tables |
-| `dev/` | local cluster with containers (master + 2 workers) |
+| `conf/` | Hadoop and Spark configuration, the same for the local cluster and EC2 |
+| `dev/` | local cluster: Ubuntu containers installed like the EC2 nodes (master + 2 workers) |
 | `infra/` | Terraform (EC2) and Ansible (`cluster.yml`) |
 | `results/` | raw results |
 | `docs/` | study guide (`GUIDE.md`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |

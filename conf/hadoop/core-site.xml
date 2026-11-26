@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
 <configuration>
+  <!-- where the NameNode is -->
   <property><name>fs.defaultFS</name><value>hdfs://master:9000</value></property>
 </configuration>

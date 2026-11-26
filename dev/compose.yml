@@ -3,26 +3,23 @@ name: cloud-bigdata-dev
 
 services:
   master:
-    build: .
+    build: {context: .., dockerfile: dev/Dockerfile}
     image: cloud-bigdata-project/node:dev
     hostname: master
     environment: {ROLE: master}
     volumes: [..:/opt/work, master-data:/data]
     ports: ["9870:9870", "8080:8080", "18080:18080", "4040:4040"]
+    depends_on: [worker1, worker2]
 
   worker1:
     image: cloud-bigdata-project/node:dev
     hostname: worker1
-    environment: {ROLE: worker}
     volumes: [..:/opt/work, worker1-data:/data]
-    depends_on: [master]
 
   worker2:
     image: cloud-bigdata-project/node:dev
     hostname: worker2
-    environment: {ROLE: worker}
     volumes: [..:/opt/work, worker2-data:/data]
-    depends_on: [master]
 
 volumes:
   master-data:

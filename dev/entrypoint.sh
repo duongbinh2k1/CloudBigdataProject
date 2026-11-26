@@ -1,22 +1,19 @@
 #!/bin/bash
-# master: NameNode + Spark Master + History Server
-# worker: DataNode + Spark Worker
-mkdir -p /data/hdfs /data/spark-local
+# Each container starts an SSH server, like a machine. The master then starts the whole
+# cluster over SSH, with the same commands as on EC2 and in the course.
+service ssh start
 
 if [ "$ROLE" = "master" ]; then
-  if [ ! -d /data/hdfs/namenode/current ]; then
-    hdfs namenode -format -nonInteractive
-  fi
-  hdfs --daemon start namenode
+  for w in $(cat /opt/hadoop/etc/hadoop/workers); do
+    until ssh $w true; do sleep 2; done        # wait for the workers' SSH servers
+  done
+  [ -d /data/hdfs/namenode/current ] || hdfs namenode -format -nonInteractive
+  start-dfs.sh
   hdfs dfsadmin -safemode wait
   hdfs dfs -mkdir -p /spark-logs /data /results
   start-master.sh
+  start-workers.sh
   start-history-server.sh
-else
-  sleep 15   # let the master start first
-  hdfs --daemon start datanode
-  start-worker.sh spark://master:7077
 fi
 
-# keep the container running
-tail -f /dev/null
+tail -f /dev/null   # keep the container running

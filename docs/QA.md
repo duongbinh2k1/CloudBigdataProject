@@ -47,16 +47,16 @@ Tạo hạ tầng AWS bằng code (*Infrastructure as Code*, có trong slide và
 Tài khoản dùng Free plan của AWS, và tổ chức quản lý tài khoản chỉ cho phép vùng Sydney (`ap-southeast-2`); Singapore gần Việt Nam hơn nhưng bị chặn. Khoảng cách từ Việt Nam không ảnh hưởng số đo, vì mọi số đo là bên trong cluster (các máy cùng một availability zone); chỉ SSH từ laptop trễ hơn một chút.
 
 **B6. Ansible làm gì?**
-Cài đặt và cấu hình các máy đã tạo, qua SSH, theo trình tự của TP: cài Java và gói, tải Hadoop/Spark, điền file cấu hình từ template, SSH không mật khẩu, format NameNode, `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, copy code, build jar. File: `infra/ansible/cluster.yml`.
+Cài đặt và cấu hình các máy đã tạo, qua SSH, theo trình tự của TP: cài Java và gói, tải Hadoop/Spark, copy các file cấu hình trong `conf/` và file `workers`, SSH không mật khẩu, format NameNode, `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, copy code, build jar. File: `infra/ansible/cluster.yml`.
 
 **B7. Vì sao không dùng Docker / Kubernetes trên AWS?**
-Container thêm một lớp mạng ảo (overlay) xen vào số đo mạng, mà mạng là thứ cần đo cho nén shuffle. HDFS trong container cũng hay gặp lỗi tên máy. Cài trực tiếp lên máy ảo giống cách làm trong TP. Ở laptop thì có dùng container (Podman) vì chỉ để phát triển.
+Container thêm một lớp mạng ảo (overlay) xen vào số đo mạng, mà mạng là thứ cần đo cho nén shuffle. HDFS trong container cũng hay gặp lỗi tên máy. Cài trực tiếp lên máy ảo giống cách làm trong TP. Ở laptop thì dùng container (Podman) để mô phỏng các máy: mỗi container là một Ubuntu, cài giống hệt EC2 và khởi động bằng cùng các lệnh `start-*.sh`.
 
 **B8. Cấu hình Spark (core, RAM) được đặt thế nào? Đổi máy thì sao?**
-Ansible đọc số core và RAM của máy (*facts*) rồi điền vào template: executor dùng hết core và ½ RAM, driver ¼ RAM, worker cho Spark RAM − 3 GB, `parallelism` = worker × core × 4, bản sao HDFS = min(3, worker). Đổi loại máy hay số worker chỉ cần sửa `infra/terraform/variables.tf`, các giá trị khác tự tính lại. File: `infra/ansible/vars.yml`, `templates/spark-defaults.conf`.
+Dùng **mặc định của Spark**, như slide (slide chỉ dạy `start-master.sh` / `start-slaves.sh` với file danh sách worker). Mặc định: mỗi worker cho Spark tất cả core và RAM − 1 GB; mỗi app có một executor mỗi worker dùng hết core, 1 GB heap; driver 1 GB; số partition mặc định = tổng số core. File cấu hình (`conf/`) chỉ có những gì cần để chạy: địa chỉ master và NameNode, `JAVA_HOME`, thư mục dữ liệu HDFS, event log cho History Server, thư viện native cho zstd. Đổi loại máy hay số worker chỉ cần sửa `infra/terraform/variables.tf`; mặc định tự theo máy mới.
 
-**B9. Facts là gì? Template là gì?**
-*Facts* là thông tin Ansible tự thu thập khi kết nối vào máy (số CPU, RAM, hệ điều hành…), dùng như biến (`ansible_processor_vcpus`, `ansible_memtotal_mb`). *Template* là file cấu hình có chỗ trống `{{ biến }}` (Jinja2); module `template` điền giá trị rồi ghi file lên máy, giống ví dụ `template: src=httpd.j2` trong slide Ansible.
+**B9. Vì sao không chỉnh RAM/core cho Spark?**
+Không cần để thí nghiệm đúng: điều quan trọng là **mọi lần chạy dùng cùng một cấu hình**, để chỉ có nén thay đổi. Mặc định đáp ứng điều đó và đúng như cách cài trong môn học. Hệ quả cần biết: executor chỉ có 1 GB heap nên với dữ liệu lớn Spark sẽ **spill** (tràn dữ liệu xuống đĩa) nhiều hơn; đó cũng là chỗ `spark.shuffle.spill.compress` (nén khi spill) có tác dụng.
 
 **B10. Bảo mật thế nào?**
 Security group chỉ mở SSH (cổng 22) cho IP hiện tại của laptop; các cổng khác chỉ mở giữa các máy trong cluster. Không có khoá hay mật khẩu nào trong repo (`.gitignore` chặn `*.tfvars`, `*.tfstate`, `*.pem`, `inventory.ini`).
@@ -83,8 +83,8 @@ Spark cắt chương trình tại mỗi shuffle. `IoBound`: job lấy mẫu + đ
 **C3. `reduceByKey` khác `groupByKey` thế nào?**
 `reduceByKey` gộp trước ở phía map (như *combiner* của MapReduce) rồi mới shuffle phần đã gộp → shuffle nhỏ. `groupByKey` shuffle mọi giá trị. Đó là lý do `CpuBound` gần như không có shuffle.
 
-**C4. `spark.default.parallelism` là gì, vì sao giữ cố định?**
-Số partition mặc định của mọi shuffle trong RDD. Nếu thay đổi giữa các lần chạy, thời gian thay đổi vì mức song song chứ không phải vì nén. Giá trị = worker × core × 4 (48 với 3 × m5.xlarge): mỗi core khoảng 4 task mỗi stage, đủ để cân bằng tải.
+**C4. `spark.default.parallelism` là gì?**
+Số partition mặc định của các phép shuffle trong RDD. Không đặt thì Spark dùng **tổng số core** của các executor (ví dụ 7 worker × 2 core = 14). Các app gọi `sc.defaultParallelism()` nên số partition giống nhau ở mọi lần chạy trên cùng một cluster: thời gian chỉ thay đổi vì nén, không vì mức song song.
 
 **C5. Data locality là gì?**
 Spark ưu tiên chạy task trên máy đang chứa block dữ liệu, để không phải kéo block qua mạng. Vì vậy mỗi worker vừa là DataNode vừa là Spark Worker.
@@ -192,7 +192,7 @@ Chạy lại đúng lệnh. Dữ liệu đã sinh (có file `sf<N>.txt`) đượ
 CPU: `executorCpuTime` cộng qua mọi stage (History Server), và %CPU từ `sar`. Đĩa: `sar -b` (khối 512 byte/giây) trên mọi node. Mạng: `sar -n DEV` (kB/giây, bỏ card `lo`). Byte shuffle và byte shuffle qua mạng: History Server.
 
 **G8. Sao biết lần chạy dùng đúng cấu hình?**
-Mỗi dòng `runs.csv` ghi cấu hình Spark **thực sự** dùng (`executor_cores`, `executor_memory`, `default_parallelism`, lấy từ endpoint `/environment` của History Server), cùng codec lưu trữ và shuffle. Byte shuffle thay đổi theo codec cũng xác nhận nén đã bật.
+Mỗi dòng `runs.csv` ghi codec lưu trữ và shuffle của lần chạy, và các cấu hình Spark khác là mặc định, giống nhau ở mọi lần. Số byte cũng xác nhận: byte shuffle thay đổi theo codec shuffle (nén đã bật), byte input thay đổi theo codec lưu trữ (đọc đúng bản dữ liệu).
 
 **G9. Speedup tính thế nào?**
 (thời gian không nén − thời gian có nén) / thời gian không nén × 100, cùng app và cùng kích thước. Dương = nhanh hơn, âm = chậm hơn.
@@ -246,8 +246,8 @@ File nén không chia được; nếu 1 file lớn thì bản nén chỉ có 1 t
 **I6. `sar` có làm chậm hệ thống không?**
 Rất ít: 1 mẫu mỗi giây, ghi file nhị phân nhỏ. Và nó chạy giống nhau ở mọi lần đo, nên không làm lệch so sánh. Dịch vụ sysstat định kỳ đã được tắt để không có thêm tiến trình nền.
 
-**I7. Vì sao driver ¼ RAM, executor ½ RAM?**
-Một executor mỗi worker dùng hết core; ½ RAM cho heap executor để chừa chỗ cho phần Spark dùng thêm ngoài heap (~10%), DataNode và Linux (bộ nhớ đệm đĩa). Driver không gom dữ liệu nên ¼ RAM là đủ. Quan trọng nhất: các giá trị **giống nhau ở mọi lần chạy**.
+**I7. Executor chỉ 1 GB (mặc định) có làm sai kết quả không?**
+Không làm sai so sánh, vì mọi lần chạy dùng cùng cấu hình. Nó làm app chậm hơn và spill nhiều hơn so với một cluster được tinh chỉnh; kết luận đúng cho cấu hình mặc định này. Nếu muốn dùng nhiều RAM hơn, chỉ cần thêm `spark.executor.memory` vào `conf/spark/spark-defaults.conf` (và chạy lại toàn bộ).
 
 **I8. Bạn có dùng công cụ AI không?**
 Trả lời trung thực, theo quy định của môn. Ví dụ: "Có, tôi dùng AI hỗ trợ viết một phần code và tài liệu; tôi đã kiểm tra, chạy và hiểu từng phần, và tự chạy thí nghiệm, phân tích kết quả." Nếu môn có quy định khai báo, ghi rõ trong báo cáo phần nào có AI hỗ trợ.

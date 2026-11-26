@@ -118,6 +118,8 @@ Laptop ── Podman ── container master  (NameNode, Spark Master, History S
          thư mục project được gắn vào /opt/work của mỗi container
 ```
 
+Mỗi container đóng vai **một máy Ubuntu**, cài giống hệt máy EC2: `apt` (Java, SSH, sysstat), giải nén Hadoop/Spark, cùng file cấu hình trong `conf/`, SSH không mật khẩu giữa các máy. Master khởi động cả cluster qua SSH bằng `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, đúng như trên EC2 và như slide.
+
 Cùng phần mềm (Java 11, Hadoop 3.4.1, Spark 3.5.5), cùng code, cùng script. Khác: kích thước nhỏ (SF 0.1), không có zstd ở mức lưu trữ (Mac là ARM, thư viện native của Hadoop chỉ có cho x86_64), và 3 container dùng chung một máy nên số đo không có ý nghĩa.
 
 ### 3.3 Cấu trúc thư mục
@@ -140,7 +142,8 @@ bench/                      chạy thí nghiệm
   CodecBench.java, codec_bench.sh   micro-benchmark codec
   experiments-dev.yaml, experiments-aws.yaml   thiết kế thí nghiệm
 analysis/report.py          đồ thị + bảng
-dev/                        cluster local (Dockerfile, compose.yml, entrypoint.sh, conf/)
+conf/                       file cấu hình Hadoop + Spark, dùng chung cho cluster local và EC2
+dev/                        cluster local (Dockerfile, compose.yml, entrypoint.sh, workers)
 infra/terraform/            tạo máy EC2
 infra/ansible/              cài và khởi động HDFS + Spark
 Makefile                    mọi lệnh (chạy trên laptop)
@@ -161,7 +164,7 @@ make up ENV=aws
  │             → ghi infra/ansible/inventory.ini (tên máy, IP public, IP private)
  └─ Ansible (cluster.yml):
       chờ SSH → cài Java, sysstat, libzstd → tải Hadoop + Spark
-      → đọc số core và RAM của máy → điền template cấu hình → kiểm tra zstd (checknative)
+      → copy file cấu hình conf/ + file workers → kiểm tra zstd (checknative)
       → SSH không mật khẩu từ master → format NameNode → start-dfs.sh
       → start-master.sh, start-workers.sh, start-history-server.sh
       → copy java/ và bench/ lên /opt/work → build jar
@@ -181,15 +184,15 @@ make analysis ENV=aws   analysis/report.py → analysis/figures/aws/ (đồ th�
 make down ENV=aws       terraform destroy (xoá hết, ngừng tính tiền)
 ```
 
-Ở local: `make up` (dựng 3 container) → `make run` (cùng `run_all.sh`, bản `dev`, chạy trực tiếp trong container master) → `make analysis`.
+Ở local: `make up` (dựng 3 container Ubuntu; master chạy `start-dfs.sh`, `start-master.sh`, `start-workers.sh`) → `make run` (cùng `run_all.sh`, bản `dev`, trong container master) → `make analysis`.
 
-**Ba lớp cấu hình, mỗi thông số ở một chỗ:**
+**Mỗi thứ cấu hình ở một chỗ:**
 
 | Muốn đổi | Sửa | Ai đọc |
 |---|---|---|
 | Loại máy, số worker, đĩa, vùng | `infra/terraform/variables.tf` | Terraform |
+| Hadoop, Spark (dùng chung local và EC2) | `conf/hadoop/`, `conf/spark/` | NameNode, DataNode, Spark Master/Worker, `spark-submit` |
 | Thí nghiệm (kích thước, codec, số lần lặp, app, rounds) | `bench/experiments-<env>.yaml` | `run_all.sh`, `run_experiments.py`, `report.py` |
-| Core, RAM executor/driver, `parallelism`, bản sao HDFS | *không sửa tay*: Ansible tính từ máy | Spark, HDFS (qua file cấu hình) |
 
 ---
 
@@ -402,8 +405,8 @@ row = {..., **metrics.spark_metrics(HISTORY, app_id), **metrics.sar_summary(sar_
 ```
 
 - **Xoá page cache**: Linux giữ file vừa đọc trong RAM. Không xoá thì lần chạy sau đọc từ RAM, không chạm đĩa → không đo được lợi ích của nén lưu trữ.
-- `NODES`: đọc từ `/opt/spark/conf/workers` (do Ansible ghi). Có file (EC2) → SSH vào master + các worker; không có (dev) → chạy tại chỗ.
-- `submit_command` chỉ truyền **codec shuffle** và tham số app; core/RAM/`parallelism` Spark đọc từ `spark-defaults.conf` của cluster.
+- `NODES`: master + các máy trong `/opt/spark/conf/workers` (file mà `start-workers.sh` dùng; trên EC2 do Ansible ghi, ở local có sẵn trong image), mỗi máy được gọi qua SSH.
+- `submit_command` chỉ truyền **codec shuffle** và tham số app; mọi thứ khác là mặc định của Spark.
 
 ```python
 if shuffle == "off": {"spark.shuffle.compress": "false", "spark.shuffle.spill.compress": "false"}
@@ -421,7 +424,6 @@ else:                {"spark.shuffle.compress": "true",  "spark.shuffle.spill.co
 |---|---|
 | `/api/v1/applications/<id>` | thời gian chạy (`duration`) |
 | `/api/v1/applications/<id>/stages` | cộng qua mọi stage: `executorRunTime`, `executorCpuTime`, `inputBytes`, `outputBytes`, `shuffleWriteBytes`, `shuffleReadBytes`, `shuffleRemoteBytesRead`, `shuffleFetchWaitTime`, `jvmGcTime`, spill… |
-| `/api/v1/applications/<id>/environment` | cấu hình Spark **thực sự** dùng: `spark.executor.cores`, `spark.executor.memory`, `spark.default.parallelism` |
 
 Bỏ qua stage `SKIPPED` (Spark tái dùng kết quả cũ, không chạy).
 
@@ -462,10 +464,10 @@ Công thức:
 
 ### 5.8 Hạ tầng
 
-**Cluster local (`dev/`)**
-- `Dockerfile`: một image cho mọi node: JDK 11, Python 3 + PyYAML, sysstat, Hadoop 3.4.1, Spark 3.5.5, file cấu hình trong `dev/conf/`.
+**Cluster local (`dev/`)**: mô phỏng các máy EC2 bằng container.
+- `Dockerfile`: `FROM ubuntu:22.04` (như TP container của môn), `apt-get install` Java 11, SSH, sysstat, PyYAML; tải và giải nén Hadoop 3.4.1, Spark 3.5.5; khoá SSH chung cho mọi container (SSH không mật khẩu); copy `conf/` và `dev/workers`. Daemon chạy bằng `root` trong container (trên EC2 là `ubuntu`).
 - `compose.yml`: 3 container (master, worker1, worker2), mỗi container một volume cho dữ liệu HDFS, thư mục project gắn vào `/opt/work`.
-- `entrypoint.sh`: theo biến `ROLE`: master → format NameNode lần đầu, chạy NameNode, Spark Master, History Server; worker → DataNode, Spark Worker.
+- `entrypoint.sh`: mọi container bật SSH server; master chờ SSH của các worker, format NameNode lần đầu, rồi `start-dfs.sh`, `start-master.sh`, `start-workers.sh`, `start-history-server.sh`.
 
 **Terraform (`infra/terraform/`)**: tạo hạ tầng trên AWS bằng code.
 - `data "aws_ami"`: tìm image Ubuntu 22.04 x86_64 mới nhất của Canonical.
@@ -478,30 +480,22 @@ Công thức:
 
 **Ansible (`infra/ansible/cluster.yml`)**: cài đặt, theo đúng trình tự của TP:
 1. Chờ các máy nhận SSH.
-2. Mọi máy: đặt hostname, `/etc/hosts` (IP private của mọi node), tắt cập nhật tự động (tránh nhiễu khi đo), cài gói, tải và giải nén Hadoop + Spark, biến môi trường, **điền template cấu hình**, file `workers`, thư mục dữ liệu, kiểm tra `hadoop checknative` báo `zstd: true`.
+2. Mọi máy: đặt hostname, `/etc/hosts` (IP private của mọi node), tắt cập nhật tự động (tránh nhiễu khi đo), cài gói, tải và giải nén Hadoop + Spark, biến môi trường, **copy file cấu hình `conf/`**, file `workers`, thư mục dữ liệu, kiểm tra `hadoop checknative` báo `zstd: true`.
 3. SSH không mật khẩu từ master đến mọi máy (`start-dfs.sh`, `start-workers.sh` và script thí nghiệm cần).
 4. Trên master: format NameNode (lần đầu), `start-dfs.sh`, chờ HDFS ra khỏi safe mode, tạo thư mục HDFS, `start-master.sh` + `start-workers.sh` + `start-history-server.sh`, copy code, build jar.
 
-**Tài nguyên tự tính** (`vars.yml` + `templates/`):
+**File cấu hình (`conf/`, dùng chung local và EC2)**: chỉ những gì cần để chạy được, mọi thứ khác là mặc định của Hadoop/Spark (như slide: "not much things to edit in each file").
 
-```yaml
-workers: "{{ groups['workers'] | length }}"
-cores:   "{{ hostvars['worker1'].ansible_processor_vcpus }}"
-ram_gb:  "{{ hostvars['worker1'].ansible_memtotal_mb // 1024 }}"
-```
+| File | Nội dung | Vì sao cần |
+|---|---|---|
+| `hadoop/core-site.xml` | `fs.defaultFS = hdfs://master:9000` | mọi máy biết NameNode ở đâu |
+| `hadoop/hdfs-site.xml` | thư mục dữ liệu `/data/hdfs/...`; tắt kiểm tra tên máy ngược (cho container) | mặc định là `/tmp`, bị xoá khi khởi động lại |
+| `hadoop/hadoop-env.sh` | `JAVA_HOME` | Hadoop bắt buộc (slide: "JAVA_HOME defined") |
+| `spark/spark-env.sh` | `JAVA_HOME`, `HADOOP_CONF_DIR`, `SPARK_MASTER_HOST=master` | Java, tìm cấu hình HDFS, địa chỉ master cố định |
+| `spark/spark-defaults.conf` | `spark.master`, event log, thư viện native | app tìm master; History Server có số đo; zstd chạy được |
+| `workers` (Ansible ghi / `dev/workers`) | danh sách worker | `start-dfs.sh`, `start-workers.sh` (slide: file "slaves") |
 
-`ansible_processor_vcpus` và `ansible_memtotal_mb` là **facts**: thông tin Ansible tự thu thập khi kết nối vào máy. Template (giống ví dụ `template: src=httpd.j2` trong slide Ansible) dùng chúng:
-
-| Template | Dòng | Quy tắc | m5.xlarge | m7i-flex.large |
-|---|---|---|---|---|
-| `spark-env.sh` | `SPARK_WORKER_CORES` | = số vCPU | 4 | 2 |
-| `spark-env.sh` | `SPARK_WORKER_MEMORY` | = RAM − 3 GB (Linux, DataNode) | 12 GB | 4 GB |
-| `spark-defaults.conf` | `spark.executor.memory` | = ½ RAM | 7 GB | 3 GB |
-| `spark-defaults.conf` | `spark.driver.memory` | = ¼ RAM | 3 GB | 1 GB |
-| `spark-defaults.conf` | `spark.default.parallelism` | = worker × core × 4 | 48 | 24 |
-| `hdfs-site.xml` | `dfs.replication` | = min(3, worker) | 3 | 3 |
-
-Ansible tính, ghi ra file; Spark và HDFS chỉ đọc file như một cluster cài tay bình thường.
+**Tài nguyên Spark: mặc định.** Mỗi worker cho Spark dùng **tất cả core** và **RAM − 1 GB**; mỗi app có **một executor mỗi worker** dùng hết core của worker, **1 GB heap**; driver 1 GB; `defaultParallelism` = **tổng số core** của các executor (ví dụ 3 worker × 2 core = 6). Mặc định này giống nhau ở mọi lần chạy, nên so sánh giữa các codec vẫn công bằng.
 
 **Makefile**: mọi lệnh. Với `ENV=aws`, `make run/status/fetch/shell` SSH vào master (IP lấy từ `terraform output`); `make up/down` gọi Terraform với IP hiện tại của laptop (`curl https://checkip.amazonaws.com`). `make analysis` tự tạo `.venv` (pandas, matplotlib) lần đầu.
 
@@ -530,9 +524,9 @@ Ansible tính, ghi ra file; Spark và HDFS chỉ đọc file như một cluster 
 | 1 lần khởi động mỗi app | lần đầu chậm do JVM, cache |
 | Xoá page cache mọi node trước mỗi lần | đọc từ RAM thay vì đĩa (che mất lợi ích nén lưu trữ) |
 | Cùng số task cho mọi codec (file < 1 block) | lẫn tác động của nén với tác động của song song |
-| `parallelism` và tài nguyên cố định cho mọi lần | lẫn tác động của nén với cấu hình Spark |
+| Cấu hình Spark giống nhau ở mọi lần chạy (mặc định) | lẫn tác động của nén với cấu hình Spark |
 | Máy `m5` (CPU ổn định), đĩa gp3, cùng availability zone | hiệu năng thay đổi giữa đầu và cuối đợt đo |
-| Tắt cập nhật tự động, tắt sysstat định kỳ | tiến trình nền gây nhiễu |
+| Tắt cập nhật tự động | tiến trình nền gây nhiễu |
 | Dữ liệu tất định | không tái lập được |
 
 ### 6.3 Số đo và ý nghĩa
@@ -549,7 +543,6 @@ Ansible tính, ghi ra file; Spark và HDFS chỉ đọc file như một cluster 
 | `disk_read_bytes`, `disk_write_bytes` | sar | I/O đĩa thật, mọi node |
 | `net_rx_bytes`, `net_tx_bytes` | sar | lưu lượng mạng thật, mọi node |
 | `cpu_busy_pct`, `cpu_iowait_pct` | sar | %CPU bận, %CPU chờ I/O |
-| `executor_cores`, `executor_memory`, `default_parallelism` | History Server | cấu hình Spark thực sự dùng |
 
 ---
 
@@ -589,4 +582,4 @@ Các nhận định dưới đây là **giả thuyết** dựa trên lý thuyế
 | Một app chạy tay | `spark-submit --class compression.apps.IoBound java/build/cloud-bigdata-project.jar hdfs://master:9000/data/sf0.1/lz4/lineitem hdfs://master:9000/results/demo lz4` |
 | Số đo của một lần chạy | History Server http://localhost:18080 → app → Stages (Shuffle Write, Input) |
 | Kết quả, đồ thị | `results/aws/runs.csv`, `analysis/figures/aws/` |
-| Code hạ tầng | `infra/terraform/main.tf`, `infra/ansible/cluster.yml`, `templates/` |
+| Code hạ tầng | `infra/terraform/main.tf`, `infra/ansible/cluster.yml`, `conf/`, `dev/` |

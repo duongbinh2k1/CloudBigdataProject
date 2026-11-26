@@ -57,7 +57,7 @@ def submit_command(cfg, app, sf, storage, shuffle, output):
     else:   # lz4, snappy, zstd (Spark has no gzip for shuffle)
         shuffle_conf = {"spark.shuffle.compress": "true", "spark.shuffle.spill.compress": "true",
                         "spark.io.compression.codec": shuffle}
-    # executors, memory and parallelism come from the cluster's spark-defaults.conf
+    # everything else: Spark's defaults and conf/spark/spark-defaults.conf
     cmd = ["spark-submit", "--class", CLASSES[app]]
     for key, value in shuffle_conf.items():
         cmd += ["--conf", f"{key}={value}"]

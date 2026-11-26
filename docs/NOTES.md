@@ -53,7 +53,7 @@ Với 32 vòng SHA-256, `cpu_bound` (20) và `balanced` (31) quá gần nhau, n�
 
 - **Cả quy trình chạy được trên EC2**: Terraform + Ansible (~12 phút), sinh dữ liệu, micro-benchmark, 27 lần đo, `make fetch`, `make down`.
 - **zstd lưu trữ chạy được**: Spark (client Hadoop 3.3.4) ghi và đọc file `.zst` bằng thư viện native của Hadoop 3.4.1.
-- Cấu hình Spark tự tính đúng: executor 2 core / 3 GB, driver 1 GB, `parallelism` 24 (cột trong `runs.csv`).
+- Lần test này chạy với cấu hình Spark tự tính (executor 2 core / 3 GB, driver 1 GB, 24 partition); sau đó project chuyển về cấu hình mặc định của Spark (executor 1 GB, số partition = tổng số core) cho đơn giản và đúng bài giảng.
 - Xoá cache có tác dụng: `disk_read_bytes` > 0 ở mọi lần chạy.
 - Tỉ lệ nén lưu trữ (SF 1): gzip 3,30×, zstd 3,17×, snappy 2,05×, lz4 1,95×. Shuffle: zstd ~3,3×, lz4 ~2,0–2,4×, snappy ~2,1–2,4×.
 - Quan sát cần xác nhận bằng đợt chính thức (5 lần lặp, `m5.xlarge`):
