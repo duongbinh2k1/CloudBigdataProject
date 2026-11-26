@@ -11,8 +11,8 @@ Nguyên tắc: **EC2 là môi trường chính, local là bản mô phỏng**. C
         │ tạo máy: compose.yml           │                      │ tạo máy: Terraform             │
         │ chạy script: Dockerfile,       │                      │ chạy script: Ansible           │
         │              entrypoint.sh     │                      │                                │
-        │ riêng: root, khoá SSH chung,   │                      │ riêng: tên máy, /etc/hosts,    │
-        │        tarball có sẵn          │                      │        tắt cập nhật, SSH mesh  │
+        │ riêng: root, khoá SSH chung    │                      │ riêng: tên máy, /etc/hosts,    │
+        │                                │                      │        tắt cập nhật, SSH mesh  │
         └────────────────────────────────┘                      └────────────────────────────────┘
 ```
 
@@ -160,11 +160,10 @@ Không có core, RAM hay `parallelism`: Spark dùng mặc định (mỗi worker 
 **`dev/Dockerfile`**: công thức tạo image (một "máy").
 ```dockerfile
 FROM ubuntu:22.04                                       # Ubuntu trắng, như máy EC2
-ADD dev/.cache/hadoop-3.4.1-lean.tar.gz dev/.cache/spark-3.5.5-bin-hadoop3.tgz /opt/
 COPY cluster/ /opt/cluster/
 RUN bash /opt/cluster/install.sh                        # CÙNG script với EC2
 ```
-- `ADD` với file `.tar.gz` có trên máy thì **tự giải nén** vào `/opt`. `install.sh` thấy `/opt/hadoop-3.4.1` đã có nên không tải (mạng từ Việt Nam tới `archive.apache.org` rất chậm). Hai file nằm trong `dev/.cache/` (không lên git).
+- Cài đặt giống hệt EC2: `install.sh` cài gói, tải và giải nén Hadoop/Spark, cấu hình.
 - `RUN`: chạy lệnh lúc build image; kết quả được lưu trong image.
 
 ```dockerfile

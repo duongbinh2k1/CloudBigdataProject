@@ -36,30 +36,12 @@ Mỗi lần khởi động lại Mac, chạy lại `podman machine start` trư�
 
 ---
 
-## 2. Lấy code và hai file Hadoop/Spark
+## 2. Lấy code
 
 ```bash
 git clone git@github.com:duongbinh2k1/CloudBigdataProject.git
 cd CloudBigdataProject
 ```
-
-Cluster local cần sẵn **hai file tarball** trong `dev/.cache/` (không có trên git vì nặng ~900 MB). Tải một lần:
-
-```bash
-mkdir -p dev/.cache
-curl -fL -o dev/.cache/hadoop-3.4.1-lean.tar.gz https://archive.apache.org/dist/hadoop/common/hadoop-3.4.1/hadoop-3.4.1-lean.tar.gz
-curl -fL -o dev/.cache/spark-3.5.5-bin-hadoop3.tgz https://archive.apache.org/dist/spark/spark-3.5.5/spark-3.5.5-bin-hadoop3.tgz
-```
-
-- `archive.apache.org` có thể **rất chậm** từ Việt Nam (đã gặp 0,03 MB/s). Nếu quá lâu, tải bằng trình duyệt hoặc ở mạng khác, rồi đặt hai file vào `dev/.cache/` với đúng tên trên.
-- Kiểm tra file tải về đúng là bản chính thức (so với mã Apache công bố):
-  ```bash
-  shasum -a 512 dev/.cache/*
-  curl -s https://archive.apache.org/dist/hadoop/common/hadoop-3.4.1/hadoop-3.4.1-lean.tar.gz.sha512
-  curl -s https://archive.apache.org/dist/spark/spark-3.5.5/spark-3.5.5-bin-hadoop3.tgz.sha512
-  ```
-  Hai mã phải giống nhau từng ký tự.
-- Máy EC2 **không** cần hai file này: `install.sh` tự tải từ Apache (từ mạng AWS thì nhanh).
 
 ---
 
@@ -68,7 +50,7 @@ curl -fL -o dev/.cache/spark-3.5.5-bin-hadoop3.tgz https://archive.apache.org/di
 ```bash
 make up
 ```
-- Lần đầu: build image (Ubuntu + `cluster/install.sh`), khoảng 5–10 phút. Các lần sau vài giây.
+- Lần đầu: build image (Ubuntu + `cluster/install.sh`, tải Hadoop và Spark như trên EC2). Các lần sau dùng lại image nên chỉ vài giây.
 - Sau đó master tự khởi động cluster bằng `cluster/start-cluster.sh`. **Chờ khoảng 1 phút.**
 - Kiểm tra: mở http://localhost:8080 → thấy **2 workers**; http://localhost:9870 → tab *Datanodes* thấy **2 DataNode**.
 
@@ -241,7 +223,6 @@ make down ENV=aws         # xoá cluster; gõ yes
 | Hiện tượng | Nguyên nhân | Cách làm |
 |---|---|---|
 | `Cannot connect to Podman` | máy ảo Podman chưa chạy | `podman machine start` |
-| `make up` báo không tìm thấy `dev/.cache/...` | chưa tải hai tarball | mục 2 |
 | Không có worker trên http://localhost:8080 | cluster chưa khởi động xong | chờ 1–2 phút; xem log: `podman logs cloud-bigdata-dev-master-1` |
 | `no EC2 cluster: run make up ENV=aws first` | chưa có cluster (hoặc đã `down`) | `make up ENV=aws` |
 | `make status/shell ENV=aws` treo hoặc *Connection timed out* | IP nhà đã đổi, security group chỉ cho IP cũ | `make up ENV=aws` (cập nhật IP, không tạo lại máy) |

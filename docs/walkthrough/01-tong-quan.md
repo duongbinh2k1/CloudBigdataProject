@@ -124,8 +124,7 @@ CloudBigdataProject/
 │   ├── hadoop/                  core-site.xml, hdfs-site.xml, hadoop-env.sh
 │   └── spark/                   spark-defaults.conf, spark-env.sh
 ├── dev/                         CLUSTER LOCAL (Podman)
-│   ├── Dockerfile, compose.yml, entrypoint.sh, workers
-│   └── .cache/                  2 file tarball Hadoop/Spark đã tải (không lên git)
+│   └── Dockerfile, compose.yml, entrypoint.sh, workers
 ├── infra/
 │   ├── terraform/               tạo máy EC2 (main.tf, variables.tf, versions.tf)
 │   └── ansible/                 cài lên máy EC2 (cluster.yml, ansible.cfg)
@@ -141,9 +140,8 @@ CloudBigdataProject/
 make up
   └─ podman compose up --build
        ├─ build image (lần đầu): Dockerfile
-       │     FROM ubuntu:22.04 → ADD 2 tarball trong dev/.cache/ (giải nén sẵn vào /opt)
-       │     → COPY cluster/ → bash cluster/install.sh
-       │        (apt-get; Hadoop/Spark đã có nên không tải; biến môi trường; cấu hình)
+       │     FROM ubuntu:22.04 → COPY cluster/ → bash cluster/install.sh
+       │        (apt-get, tải + giải nén Hadoop/Spark, biến môi trường, cấu hình: như EC2)
        │     → khoá SSH chung, file workers, chạy daemon bằng root
        └─ tạo 3 container: master, worker1, worker2
             mỗi container: entrypoint.sh → bật SSH server

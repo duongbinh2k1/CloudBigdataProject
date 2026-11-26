@@ -1,9 +1,6 @@
 # One machine of the local cluster, installed like the EC2 nodes
 FROM ubuntu:22.04
 
-# Hadoop and Spark archives already on the laptop (archive.apache.org is very slow from here):
-# ADD unpacks them into /opt, so install.sh does not download them again
-ADD dev/.cache/hadoop-3.4.1-lean.tar.gz dev/.cache/spark-3.5.5-bin-hadoop3.tgz /opt/
 COPY cluster/ /opt/cluster/
 RUN bash /opt/cluster/install.sh
 
