@@ -1,5 +1,7 @@
 # 01 — Tổng quan: ý tưởng, khái niệm, kiến trúc, một lần đo đi qua những gì
 
+Đề bài và từng yêu cầu: xem [00-de-bai.md](00-de-bai.md). Phần này đi vào cách project giải quyết.
+
 ## 1. Project trả lời câu hỏi gì
 
 Trong một hệ Big Data, dữ liệu liên tục được **đọc từ đĩa**, **gửi qua mạng** và **ghi xuống đĩa**. Nén dữ liệu làm số byte nhỏ đi, nên đọc/ghi/gửi ít hơn. Nhưng nén và giải nén **tốn CPU**. Vậy:

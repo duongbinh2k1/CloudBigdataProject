@@ -1,9 +1,10 @@
 # Đọc hiểu toàn bộ project, từng dòng code
 
-Đọc theo thứ tự:
+Đọc theo thứ tự: đề bài trước, rồi thiết kế, rồi code.
 
 | # | File | Nội dung |
 |---|---|---|
+| 0 | [00-de-bai.md](00-de-bai.md) | đề bài từng mục (§1–§7): đề nói gì, nghĩa là phải làm gì, project đáp ứng ở đâu; bảng kiểm tra yêu cầu (gồm chỗ còn thiếu) |
 | 1 | [01-tong-quan.md](01-tong-quan.md) | câu hỏi của project, khái niệm nền (HDFS, Spark, shuffle, nén), kiến trúc, toàn bộ quy trình, một lần đo đi qua những gì |
 | 2 | [02-du-lieu.md](02-du-lieu.md) | dữ liệu TPC-H: `Hashing`, `Rows`, `Generator`, `Codecs` |
 | 3 | [03-ung-dung.md](03-ung-dung.md) | ba ứng dụng Spark (`IoBound`, `CpuBound`, `Balanced`), Spark làm gì bên trong, `build.sh` |
