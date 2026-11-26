@@ -20,7 +20,7 @@ experiment script and the plots, sysstat (`sar`).
 | `dev/` | local cluster: Ubuntu containers installed and started with the scripts of `cluster/` (master + 2 workers) |
 | `infra/` | Terraform (EC2) and Ansible (`cluster.yml`) |
 | `results/` | raw results |
-| `docs/` | study guide (`GUIDE.md`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |
+| `docs/` | study guide (`GUIDE.md`), line-by-line walkthrough (`walkthrough/`), defence questions (`QA.md`), plan, decisions, notes, AWS checklist |
 
 ## How to run
 

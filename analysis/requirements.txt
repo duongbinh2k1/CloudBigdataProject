@@ -1,4 +1,4 @@
-# Analysis environment (runs on the laptop, Python >= 3.9): make analysis-venv
+# Python packages for analysis/report.py (installed in .venv by make analysis)
 pandas==2.2.3
 matplotlib==3.9.4
 pyyaml==6.0.2

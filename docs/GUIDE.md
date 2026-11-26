@@ -1,6 +1,6 @@
 # Hướng dẫn học và bảo vệ project
 
-Tài liệu này giải thích **toàn bộ** project: đề bài yêu cầu gì, ý tưởng chính, kiến trúc, luồng chạy từ lệnh `make` đến đồ thị, và từng file code. Câu hỏi bảo vệ và câu trả lời ở [QA.md](QA.md).
+Tài liệu này giải thích **toàn bộ** project: đề bài yêu cầu gì, ý tưởng chính, kiến trúc, luồng chạy từ lệnh `make` đến đồ thị, và từng file code. Câu hỏi bảo vệ và câu trả lời ở [QA.md](QA.md). Giải thích **từng dòng code** ở [walkthrough/](walkthrough/README.md).
 
 Thứ tự đọc nên theo: mục 1 → 2 → 3 → 4 (hiểu bức tranh chung), rồi mục 5 (code), mục 6–7 (thí nghiệm, kết quả), mục 8 (giới hạn).
 
