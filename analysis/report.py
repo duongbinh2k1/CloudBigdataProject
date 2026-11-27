@@ -132,10 +132,12 @@ def workload(runs):
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
     for ax, level, baseline, other, other_off in ((axes[0], "storage", "none", "shuffle", "off"),
                                                   (axes[1], "shuffle", "off", "storage", "none")):
-        mean = runs[(runs["sf"] == sf) & (runs[other] == other_off)].groupby(["app", level])["time_s"].mean().unstack()
+        times = runs[(runs["sf"] == sf) & (runs[other] == other_off)].groupby(["app", level])["time_s"]
+        mean, std = times.mean().unstack(), times.std().unstack()
         gain = mean.rsub(mean[baseline], axis=0).div(mean[baseline], axis=0).drop(columns=baseline) * 100
-        gain.index = [APPS[a] for a in gain.index]
-        gain.plot.bar(ax=ax, color=[COLORS[c] for c in gain.columns], rot=0)
+        error = std.div(mean[baseline], axis=0).drop(columns=baseline) * 100      # std of the codec's runs
+        gain.index = error.index = [APPS[a] for a in gain.index]
+        gain.plot.bar(ax=ax, yerr=error, capsize=3, color=[COLORS[c] for c in gain.columns], rot=0)
         ax.axhline(0, color="black", linewidth=0.8)
         ax.set_title(f"{level.capitalize()} compression, SF {sf}")
         ax.set_ylabel("Faster than no compression (%)")

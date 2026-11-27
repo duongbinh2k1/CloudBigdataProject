@@ -1,0 +1,6 @@
+3868155788  11604467364  hdfs://master:9000/data/sf10/lz4/lineitem
+828036304   2484108912   hdfs://master:9000/data/sf10/lz4/orders
+7708547813  23125643439  hdfs://master:9000/data/sf10/none/lineitem
+1812141058  5436423174   hdfs://master:9000/data/sf10/none/orders
+2372892260  7118676780   hdfs://master:9000/data/sf10/zstd/lineitem
+535456167   1606368501   hdfs://master:9000/data/sf10/zstd/orders

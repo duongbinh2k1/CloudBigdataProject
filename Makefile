@@ -5,7 +5,7 @@ SSH = ssh -i $(KEY) -o StrictHostKeyChecking=accept-new ubuntu@$(MASTER)
 # Terraform, with my current public IP: the only address allowed to SSH into the machines
 TF = TF_VAR_my_ip_cidr=$$(curl -s https://checkip.amazonaws.com)/32 terraform -chdir=infra/terraform
 
-.PHONY: up run status fetch shell down analysis
+.PHONY: up run status fetch shell down analysis report
 
 # create the 8 EC2 machines (Terraform), then install and start HDFS + Spark (Ansible)
 up: $(KEY)
@@ -36,6 +36,12 @@ down:
 # figures and tables from results/ (Python virtual environment created the first time)
 analysis: .venv/bin/python
 	.venv/bin/python analysis/report.py
+
+# report/REPORT.md -> report/REPORT.pdf (pandoc, then Chrome prints the HTML to PDF)
+report:
+	cd report && pandoc REPORT.md -s --embed-resources --resource-path=. --css style.css -o REPORT.html
+	cd report && "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --no-pdf-header-footer --print-to-pdf=REPORT.pdf REPORT.html
+	rm report/REPORT.html
 
 .venv/bin/python:
 	python3 -m venv .venv

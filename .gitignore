@@ -21,3 +21,6 @@ analysis/figures/aws-test/
 
 # local samples (not part of the project)
 bench/.samples/
+
+# raw sar data: committed as results/sar.tar.gz (extract with: tar xzf results/sar.tar.gz -C results)
+results/sar/

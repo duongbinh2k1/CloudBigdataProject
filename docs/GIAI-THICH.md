@@ -171,7 +171,7 @@ E3 thêm C3 = zstd/lz4 (C0, C1, C2 đã có trong E1/E2).
 Mỗi lần chạy:
 1. Trên mọi máy (qua SSH): xoá page cache (để dữ liệu thật sự được đọc từ đĩa) và bật `sar` mỗi giây.
 2. `spark-submit` app với các `--conf` nén.
-3. Tắt `sar`, lấy số liệu (`sadf -d`), lưu bản thô vào `results/sar/<run>/`.
+3. Tắt `sar`, lấy số liệu (`sadf -d`), lưu bản thô vào `results/sar/<run>/` (trong repo: nén thành `results/sar.tar.gz`, giải nén bằng `tar xzf results/sar.tar.gz -C results`).
 4. Hỏi History Server số đo của app, cộng số đo `sar`, ghi **một dòng** vào `results/runs.csv`.
 
 Để công bằng: thứ tự 216 lần chạy được **xáo trộn** (seed cố định), mỗi app chạy khởi động 1 lần không tính,

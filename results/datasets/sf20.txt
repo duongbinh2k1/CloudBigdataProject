@@ -1,0 +1,6 @@
+7737354329   23212062987  hdfs://master:9000/data/sf20/lz4/lineitem
+1656206405   4968619215   hdfs://master:9000/data/sf20/lz4/orders
+15463074193  46389222579  hdfs://master:9000/data/sf20/none/lineitem
+3635499650   10906498950  hdfs://master:9000/data/sf20/none/orders
+4746964046   14240892138  hdfs://master:9000/data/sf20/zstd/lineitem
+1070671987   3212015961   hdfs://master:9000/data/sf20/zstd/orders

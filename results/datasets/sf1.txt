@@ -1,0 +1,6 @@
+386375427  1159126281  hdfs://master:9000/data/sf1/lz4/lineitem
+82803083   248409249   hdfs://master:9000/data/sf1/lz4/orders
+764186488  2292559464  hdfs://master:9000/data/sf1/none/lineitem
+179696679  539090037   hdfs://master:9000/data/sf1/none/orders
+236677985  710033955   hdfs://master:9000/data/sf1/zstd/lineitem
+53465023   160395069   hdfs://master:9000/data/sf1/zstd/orders

@@ -25,7 +25,7 @@ Python (experiment script, figures).
 | `java/src/compression/` | data generator (`DataGen`), the 3 apps (`IoBound`, `CpuBound`, `Balanced`), `Util` |
 | `bench/` | `experiments.yaml` (design), `run_all.sh` (whole study), `run_experiments.py` (runs + metrics), `CodecBench.java` |
 | `analysis/` | `report.py`: figures and tables |
-| `results/` | raw measurements: `runs.csv`, `sar/`, `datasets/`, `codec_bench.csv` |
+| `results/` | raw measurements: `runs.csv`, `sar.tar.gz` (raw `sar` data, `tar xzf results/sar.tar.gz -C results`), `datasets/`, `codec_bench.csv`, `run.log` |
 | `docs/GIAI-THICH.md` | full explanation of the project and defence questions (Vietnamese) |
 
 ## Requirements (once)
