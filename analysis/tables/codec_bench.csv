@@ -1,11 +1,4 @@
-input,codec,ratio,compress_mb_s,decompress_mb_s
-lineitem,gzip,3.37,23.06,239.4
-lineitem,lz4,1.91,315.71,734.92
-lineitem,snappy,2.03,332.77,536.24
-lineitem,zstd-1,3.15,251.65,741.4
-lineitem,zstd-3,3.22,181.27,643.21
-random,gzip,1.0,38.77,1293.04
-random,lz4,1.0,787.66,972.59
-random,snappy,1.0,1743.09,1078.92
-random,zstd-1,1.0,1283.15,1560.67
-random,zstd-3,1.0,1058.5,1557.05
+codec,ratio,compress_s,decompress_s,compress_mb_s,decompress_mb_s
+lz4,1.914,0.24,0.103,315.711,734.924
+zstd-1,3.15,0.301,0.102,251.646,741.396
+zstd-3,3.216,0.418,0.118,181.27,643.215

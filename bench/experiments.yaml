@@ -4,9 +4,8 @@ apps: [io_bound, cpu_bound, balanced]
 repetitions: 3                        # each configuration is run 3 times: mean and standard deviation
 seed: 20261111                        # random order of the runs, the same every time
 
-# Two codecs on the cluster, the two ends of the trade-off, both supported at both levels:
-# LZ4 = fast, compresses little (~1.9x); Zstd = compresses much more (~3.1x, close to gzip).
-# All 4 codecs (+ gzip, snappy) are compared on one machine by CodecBench.java, which justifies this choice.
+# Two of the four codecs of the assignment, both available for files and for the shuffle:
+# LZ4 = fast, compresses little (~2x); Zstd = compresses much more (~3x) for more CPU.
 storage_codecs: [none, lz4, zstd]     # E1: files on HDFS compressed, shuffle not compressed
 shuffle_codecs: ["off", lz4, zstd]    # E2: shuffle compressed, files not compressed
 combined: {storage: zstd, shuffle: lz4}   # E3: C0 none/off, C1 zstd/off, C2 none/lz4, C3 zstd/lz4

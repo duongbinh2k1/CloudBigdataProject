@@ -27,19 +27,13 @@ CLASSES = {"io_bound": "compression.IoBound", "cpu_bound": "compression.CpuBound
 # metric in the History Server (sum over the stages of the app) -> column of runs.csv
 SPARK_METRICS = {
     "executorRunTime": "executor_run_ms",        # time spent by the tasks
-    "executorCpuTime": "executor_cpu_ns",        # CPU time of the tasks
-    "jvmGcTime": "gc_ms",
-    "inputBytes": "input_bytes",                 # read from HDFS (compressed size)
-    "outputBytes": "output_bytes",               # written to HDFS
+    "executorCpuTime": "executor_cpu_ns",        # CPU time of the tasks (includes compression work)
     "shuffleWriteBytes": "shuffle_write_bytes",  # shuffle data written by the map tasks (compressed size)
-    "shuffleReadBytes": "shuffle_read_bytes",
-    "shuffleRemoteBytesRead": "shuffle_remote_read_bytes",   # the part that came over the network
     "shuffleWriteTime": "shuffle_write_ns",      # shuffle time = write time + fetch wait time
     "shuffleFetchWaitTime": "shuffle_fetch_wait_ms",
-    "diskBytesSpilled": "spill_bytes",
 }
 SAR_METRICS = ["cpu_busy_pct", "cpu_iowait_pct", "mem_used_pct", "disk_read_bytes", "disk_write_bytes",
-               "net_rx_bytes", "net_tx_bytes"]
+               "net_rx_bytes"]
 COLUMNS = (["run_id", "status", "app", "sf", "storage", "shuffle", "rep", "time_s"]
            + list(SPARK_METRICS.values()) + SAR_METRICS)
 
@@ -56,7 +50,7 @@ def configurations():
 def spark_submit(app, sf, storage, shuffle, output):
     if shuffle == "off":
         conf = ["spark.shuffle.compress=false", "spark.shuffle.spill.compress=false"]
-    else:      # COMMUNICATION COMPRESSION: lz4, snappy or zstd (Spark has no gzip for the shuffle)
+    else:      # COMMUNICATION COMPRESSION: lz4 or zstd
         conf = ["spark.shuffle.compress=true", "spark.shuffle.spill.compress=true",
                 f"spark.io.compression.codec={shuffle}"]
     data = f"{DATA}/sf{sf}/{storage}"
@@ -96,7 +90,7 @@ def sar_metrics(sar_csv):
     """sar_csv: node -> output of `sadf -d` (one line per second). CPU and memory: mean over the nodes;
     disk and network: bytes summed over the nodes (rate per second x 1 second)."""
     busy, iowait, mem = [], [], []
-    total = {"disk_read_bytes": 0, "disk_write_bytes": 0, "net_rx_bytes": 0, "net_tx_bytes": 0}
+    total = {"disk_read_bytes": 0, "disk_write_bytes": 0, "net_rx_bytes": 0}
     for text in sar_csv.values():
         header = []
         for line in text.splitlines():
@@ -114,7 +108,6 @@ def sar_metrics(sar_csv):
                 total["disk_write_bytes"] += float(r["bwrtn/s"]) * 512
             elif r.get("IFACE", "lo") != "lo":
                 total["net_rx_bytes"] += float(r["rxkB/s"]) * 1024
-                total["net_tx_bytes"] += float(r["txkB/s"]) * 1024
 
     def mean(values):
         return round(sum(values) / len(values), 2) if values else ""

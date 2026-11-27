@@ -3,9 +3,7 @@ package compression;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.Lz4Codec;
-import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.io.compress.ZStandardCodec;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
@@ -22,15 +20,13 @@ public class Util {
     }
 
     // STORAGE COMPRESSION: writes text files on HDFS with a Hadoop codec ("none" = not compressed).
-    // Reading needs nothing: sc.textFile() finds the codec from the file extension (.gz .snappy .lz4 .zst).
+    // Reading needs nothing: sc.textFile() finds the codec from the file extension (.lz4, .zst).
     static void save(JavaRDD<String> rdd, String path, String codec) throws Exception {
         new Path(path).getFileSystem(rdd.context().hadoopConfiguration()).delete(new Path(path), true);
         switch (codec) {
-            case "none":   rdd.saveAsTextFile(path); break;
-            case "gzip":   rdd.saveAsTextFile(path, GzipCodec.class); break;
-            case "snappy": rdd.saveAsTextFile(path, SnappyCodec.class); break;
-            case "lz4":    rdd.saveAsTextFile(path, Lz4Codec.class); break;
-            case "zstd":   rdd.saveAsTextFile(path, ZStandardCodec.class); break;
+            case "none": rdd.saveAsTextFile(path); break;
+            case "lz4":  rdd.saveAsTextFile(path, Lz4Codec.class); break;
+            case "zstd": rdd.saveAsTextFile(path, ZStandardCodec.class); break;
             default: throw new IllegalArgumentException("unknown codec: " + codec);
         }
     }

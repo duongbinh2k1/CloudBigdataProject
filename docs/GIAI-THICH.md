@@ -12,7 +12,7 @@ Nén thì ít byte phải đọc/ghi/gửi hơn, nhưng tốn CPU để nén và
 |---|---|
 | §2 HDFS phân tán, nhiều worker, giám sát CPU/RAM/đĩa/mạng, tái lập được | 8 máy EC2 (1 master + 7 worker) tạo bằng Terraform, cài bằng Ansible. Đo bằng `sar` trên mọi máy + Spark History Server |
 | §3 Ba app I/O-bound, CPU-bound, balanced, chứng minh bằng số đo | `IoBound`, `CpuBound`, `Balanced`. Bảng `analysis/tables/workload_characterisation.csv` |
-| §4 Snappy, LZ4, Gzip, Zstd + không nén; đo riêng tỉ lệ nén, tốc độ, CPU | cả 4 codec đo riêng bằng `bench/CodecBench.java` → hình 5, 8. Trên cluster chỉ dùng **LZ4 và Zstd** (lý do: mục 7) |
+| §4 chọn thuật toán + không nén; đo riêng tỉ lệ nén, thời gian nén/giải nén, CPU | chọn **LZ4 và Zstd** (lý do: mục 7), đo riêng bằng `bench/CodecBench.java` |
 | §5.1 Nén lưu trữ | E1: file trên HDFS không nén / LZ4 / Zstd, shuffle không nén |
 | §5.2 Nén truyền thông (shuffle) | E2: shuffle không nén / LZ4 / Zstd, file không nén |
 | §5.3 C0–C3 | E3: C0 none/off, C1 zstd/off, C2 none/lz4, C3 zstd/lz4 |
@@ -91,7 +91,7 @@ event log cho History Server, thư viện native cho zstd, và `spark.executor.m
   có khoá chung để `join`.
 - Mỗi đơn hàng có bộ sinh ngẫu nhiên riêng `SplittableRandom(mã đơn)`: chạy lại hay đổi số máy vẫn ra
   **đúng dữ liệu cũ**, và 3 bản (none, lz4, zstd) có nội dung giống hệt nhau.
-- **150.000 đơn mỗi file** (file lineitem ≈ 75 MB < 1 block HDFS 128 MB): file text nén bằng lz4/zstd/gzip
+- **150.000 đơn mỗi file** (file lineitem ≈ 75 MB < 1 block HDFS 128 MB): file text nén bằng lz4/zstd
   không chia nhỏ được, nên giữ file nhỏ để mọi codec có **cùng số task** (1 file = 1 task).
 - Mỗi kích thước được ghi 3 bản (none, lz4, zstd) vào `/data/sf<N>/<codec>/`.
   Tổng ≈ 62 GB, × 3 bản sao HDFS ≈ 27 GB mỗi worker.
@@ -113,7 +113,7 @@ Chứng minh loại app bằng bảng `workload_characterisation.csv` (chạy kh
 
 | Mức | Cách bật | Ở đâu |
 |---|---|---|
-| Lưu trữ | ghi file bằng codec Hadoop: `rdd.saveAsTextFile(path, ZStandardCodec.class)`. Khi đọc, `textFile()` tự nhận codec theo đuôi file (`.gz .snappy .lz4 .zst`) | `Util.save()`; codec là tham số dòng lệnh của app |
+| Lưu trữ | ghi file bằng codec Hadoop: `rdd.saveAsTextFile(path, ZStandardCodec.class)`. Khi đọc, `textFile()` tự nhận codec theo đuôi file (`.lz4`, `.zst`) | `Util.save()`; codec là tham số dòng lệnh của app |
 | Shuffle | chỉ cấu hình, không sửa code: `--conf spark.shuffle.compress=true --conf spark.io.compression.codec=lz4` | `run_experiments.py`, hàm `spark_submit()` |
 
 - Không phải tự viết thuật toán nén: Spark và Hadoop có sẵn.
@@ -129,38 +129,27 @@ cả đĩa local lẫn mạng; cái giá là CPU nén (map) và giải nén (red
 ## 7. Đo riêng codec (`bench/CodecBench.java`)
 
 §4 bắt đo **đặc tính riêng** của thuật toán: không Spark job, không HDFS, không mạng. Nén rồi giải nén
-một file lineitem 75 MB trong RAM, trên 1 luồng (nên thời gian = thời gian CPU), lặp 5 lần.
-- lz4, snappy, zstd: **đúng các class Spark dùng cho shuffle**, tham số mặc định; zstd đo cả level 1 và 3.
-- gzip: `java.util.zip` level 6 (= mặc định của `GzipCodec` Hadoop).
-- Thêm 64 MB byte ngẫu nhiên (không nén được): trường hợp nén chỉ tốn CPU mà không được gì (câu hỏi 7).
+một file lineitem 75 MB trong RAM, trên 1 luồng (nên thời gian = thời gian CPU), lặp 5 lần (bỏ 2 lần khởi động).
+- Chỉ đo **2 codec của nghiên cứu**: LZ4 và Zstd, bằng **đúng các class Spark dùng cho shuffle**.
+- Zstd đo ở 2 mức vì cụm dùng cả hai: level 1 (mặc định của Spark, cho shuffle), level 3 (mặc định của
+  Hadoop, cho file).
 - Chạy trên master trước các thí nghiệm (master rảnh, cùng loại máy với worker).
-- Kiểm chứng: tỉ lệ nén đo trên HDFS (hình 5 giữa) gần bằng bench (hình 5 trái).
+- Kiểm chứng: tỉ lệ nén đo trên HDFS và trên shuffle (hình 5 của báo cáo) gần bằng bench.
 
-### Vì sao trên cluster chỉ chọn 2 codec: LZ4 và Zstd
+| Codec | Tỉ lệ nén | Thời gian nén | Thời gian giải nén | Tốc độ nén |
+|---|---|---|---|---|
+| LZ4 | 1,91 | 0,24 s | 0,10 s | 316 MB/s |
+| Zstd level 1 | 3,15 | 0,30 s | 0,10 s | 252 MB/s |
+| Zstd level 3 | 3,22 | 0,42 s | 0,12 s | 181 MB/s |
 
-Số đo bench của bản trước (file lineitem 75 MB, 1 luồng, trung vị 5 lần):
+### Vì sao chọn 2 codec LZ4 và Zstd
 
-| Codec | Tỉ lệ nén | Nén (MB/s) | Giải nén (MB/s) | Có cho file | Có cho shuffle |
-|---|---|---|---|---|---|
-| LZ4 | 1,87 | 360 | 1237 | có | có (mặc định của Spark) |
-| Snappy | 1,96 | 502 | 866 | có | có |
-| Zstd level 1 (shuffle) | 3,02 | 324 | 762 | | có |
-| Zstd level 3 (file) | 3,14 | 186 | 629 | có | |
-| Gzip level 6 | 3,29 | 27 | 321 | có | **không** |
-
-Bốn codec thực ra chỉ có **hai nhóm**:
-- nhóm "nhanh, nén ít" (~1,9×): LZ4 và Snappy, gần như giống nhau, nên chỉ cần một đại diện;
-- nhóm "nén mạnh" (~3,1–3,3×): Zstd và Gzip.
-
-Chọn một đại diện mỗi nhóm thì hai codec **lệch nhau nhiều nhất về tỉ lệ nén** (Zstd ít hơn LZ4 khoảng 1,7 lần
-số byte), nên khác biệt thấy rõ trên đồ thị đĩa và mạng. Trong nhóm "nén mạnh", chọn **Zstd chứ không Gzip**
-vì Spark không cho Gzip nén shuffle: với Zstd, **cùng hai codec có mặt ở cả E1, E2, E3**, mọi đồ thị so sánh
-cùng một cặp, dễ đọc và dễ giải thích. Gzip (chậm hơn LZ4 khoảng 13 lần) và Snappy vẫn có trong bench, nên
-câu hỏi 1 (codec nào cân bằng tốt nhất) vẫn trả lời được với đủ 4 codec.
-
-Lưu ý khi bảo vệ: ở mức shuffle (level 1) Zstd tốn CPU gần như LZ4, nên khác biệt chủ yếu là **tỉ lệ nén**;
-ở mức file (level 3) Zstd nén chậm hơn LZ4 khoảng 2 lần. Bỏ Snappy và Gzip khỏi cluster cũng giảm số lần chạy
-từ 324 xuống 216 (tiết kiệm khoảng 7 giờ và 8 USD).
+- Đề cho 4 codec (Snappy, LZ4, Gzip, Zstd); nhóm chọn 2.
+- LZ4 và Zstd là **hai đầu của sự đánh đổi**: LZ4 nhanh nhưng nén ít (~2×), Zstd nén nhiều (~3×) nhưng tốn CPU
+  hơn. Snappy gần giống LZ4; Gzip nén gần bằng Zstd nhưng chậm hơn nhiều và **Spark không cho dùng Gzip để
+  nén shuffle**.
+- Cả LZ4 và Zstd đều dùng được **ở cả hai mức** (file và shuffle), nên mọi thí nghiệm E1, E2, E3 so sánh
+  cùng một cặp.
 
 ## 8. Thí nghiệm (`bench/experiments.yaml`, `run_experiments.py`)
 
@@ -177,57 +166,52 @@ Mỗi lần chạy:
 Để công bằng: thứ tự 216 lần chạy được **xáo trộn** (seed cố định), mỗi app chạy khởi động 1 lần không tính,
 mọi lần chạy dùng cùng cụm và cùng cấu hình. Bị ngắt thì chạy lại `make run`: lần đã `ok` được bỏ qua.
 
-Các cột chính của `runs.csv`:
+Các cột của `runs.csv` (chỉ giữ những số đo đề yêu cầu):
 
-| Cột | Nguồn | Ý nghĩa |
-|---|---|---|
-| `time_s` | History Server | thời gian chạy app |
-| `executor_cpu_ns` | History Server | tổng thời gian CPU của mọi task (chi phí nén nằm ở đây) |
-| `input_bytes`, `output_bytes` | History Server | byte đọc/ghi HDFS (đã nén) |
-| `shuffle_write_bytes`, `shuffle_remote_read_bytes` | History Server | byte shuffle (đã nén), phần đi qua mạng |
-| `shuffle_write_ns`, `shuffle_fetch_wait_ms` | History Server | thời gian shuffle = ghi + chờ kéo dữ liệu |
-| `spill_bytes` | History Server | dữ liệu tràn ra đĩa vì thiếu RAM |
-| `cpu_busy_pct`, `cpu_iowait_pct`, `mem_used_pct` | `sar` | trung bình trên 8 máy |
-| `disk_read_bytes`, `disk_write_bytes`, `net_rx_bytes`, `net_tx_bytes` | `sar` | tổng trên 8 máy |
+| Cột | Nguồn | Ý nghĩa | Đề yêu cầu |
+|---|---|---|---|
+| `time_s` | History Server | thời gian chạy app | §5.1, §5.2 |
+| `executor_run_ms`, `executor_cpu_ns` | History Server | thời gian chạy và thời gian CPU của mọi task (chi phí nén nằm trong CPU) | §3, §5.1, §5.2 |
+| `shuffle_write_bytes` | History Server | byte shuffle (đã nén) | §5.2 |
+| `shuffle_write_ns`, `shuffle_fetch_wait_ms` | History Server | thời gian shuffle = ghi + chờ kéo dữ liệu | §5.2 |
+| `cpu_busy_pct`, `cpu_iowait_pct`, `mem_used_pct` | `sar` | CPU, I/O wait, RAM: trung bình trên 8 máy | §2, §3, §5.1 |
+| `disk_read_bytes`, `disk_write_bytes`, `net_rx_bytes` | `sar` | đĩa đọc + ghi, mạng nhận: tổng trên 8 máy | §5.1, §5.2 |
+
+Thông lượng đĩa và mạng (§5.1, §5.2) = lượng dữ liệu / thời gian, tính trong `analysis/report.py`.
 
 ## 9. Đồ thị và 7 câu hỏi của đề
 
-| Hình | Nội dung (đề §6) |
-|---|---|
-| `fig1_time_vs_size` | thời gian theo kích thước, mỗi codec một đường (hàng 1: E1, hàng 2: E2) |
-| `fig2_cpu_vs_size` | CPU theo kích thước: chi phí nén |
-| `fig3_disk_vs_size` | đĩa theo kích thước: tác dụng của nén lưu trữ |
-| `fig4_network_vs_size` | mạng theo kích thước: tác dụng của nén shuffle |
-| `fig5_compression_ratio` | tỉ lệ nén: bench, file HDFS, shuffle |
-| `fig6_configurations` | thời gian của C0–C3, SF lớn nhất |
-| `fig7_workload_type` | % nhanh hơn so với không nén, theo loại app |
-| `fig8_codec_tradeoff` | tỉ lệ nén vs tốc độ nén (bench) |
+| Hình (báo cáo) | File | Nội dung (đề §6) |
+|---|---|---|
+| 2 | `fig1_time_vs_size` | thời gian theo kích thước, mỗi codec một đường (hàng 1: E1, hàng 2: E2) |
+| 3 | `fig2_cpu_vs_size` | CPU theo kích thước: chi phí nén |
+| 4 | `fig3_disk_network_vs_size` | hàng 1: đĩa theo kích thước (nén lưu trữ); hàng 2: mạng theo kích thước (nén shuffle) |
+| 5 | `fig4_compression_ratio` | tỉ lệ nén theo thuật toán: bench, file HDFS, shuffle |
+| 6 | `fig5_configurations` | thời gian của C0–C3, SF lớn nhất |
+| 7 | `fig6_workload_type` | % nhanh hơn so với không nén, theo loại app |
 
 | Câu hỏi | Trả lời bằng |
 |---|---|
-| 1. Codec nào cân bằng tốt nhất giữa tỉ lệ nén và CPU? | hình 8 + bảng `codec_bench.csv` (đủ 4 codec), rồi hình 1–2 (LZ4 vs Zstd trên cluster) |
-| 2. Nén có luôn giúp app I/O-bound? | hình 1 và 7, cột I/O-bound; so LZ4 với Zstd |
-| 3. Nén ảnh hưởng app CPU-bound thế nào? | hình 7 (gần 0%), hình 2 |
-| 4. Lợi ích thay đổi thế nào khi dữ liệu lớn dần? | độ dốc các đường trong hình 1 |
-| 5. Nén lưu trữ hay nén mạng lợi hơn? | hình 7 trái vs phải, hình 3 vs hình 4 |
+| 1. Codec nào cân bằng tốt nhất giữa tỉ lệ nén và CPU? | bảng 2 (bench) + hình 2, 3 |
+| 2. Nén có luôn giúp app I/O-bound? | bảng 3, hình 7 |
+| 3. Nén ảnh hưởng app CPU-bound thế nào? | bảng 3, hình 7 |
+| 4. Lợi ích thay đổi thế nào khi dữ liệu lớn dần? | bảng 3, hình 2 |
+| 5. Nén lưu trữ hay nén mạng lợi hơn? | hình 7 trái vs phải, bảng 4 vs bảng 5 |
 | 6. Nén cả hai có làm chậm đi không? | hình 6: C3 so với C1, C2 |
-| 7. Khi nào nên tắt nén? | dữ liệu nhỏ, app CPU-bound, dữ liệu không nén được (bench "random": gzip tốn CPU mà không giảm byte nào) |
+| 7. Khi nào nên tắt nén? | dữ liệu nhỏ (SF 1), app CPU-bound, shuffle rất nhỏ, CPU đã là nút thắt |
 
-Đề nhấn mạnh: kết luận phải dựa trên **số đo**, không phải lý thuyết. Viết kiểu
-"ở SF 20, lz4 làm `io_bound` nhanh hơn X% (hình 7) vì byte shuffle giảm Y lần (hình 5) trong khi CPU chỉ tăng Z% (hình 2)".
+Đề nhấn mạnh: kết luận phải dựa trên **số đo**, không phải lý thuyết.
 
-## 10. Giới hạn cần nêu trong báo cáo
+## 10. Những điểm nên biết khi bảo vệ (không viết trong báo cáo)
 
-- **Máy "flex"**: CPU không bị giới hạn bằng credit như t3, nhưng **đĩa và mạng có burst**: mức nền chỉ
-  39 MB/s (đĩa) và 0,39 Gbps (mạng). Bước sinh dữ liệu (~1 giờ) dùng hết credit nên phần lớn các lần đo chạy
-  ở mức nền. Cụm vì vậy nghẽn I/O nặng hơn cụm thông thường → nén có thể tỏ ra lợi hơn.
-- **File text nén không chia nhỏ được** (lz4, zstd, gzip): ở đây vô hại vì mọi file < 1 block, nhưng với file lớn sẽ mất song song.
-- **Chỉ 2 codec trên cluster**: Gzip và Snappy chỉ đo bằng bench (lý do ở mục 7). Gzip không có cho shuffle trong Spark.
+- **Máy "flex"**: CPU không bị giới hạn bằng credit như t3, nhưng đĩa và mạng có burst (mức nền 39 MB/s và
+  0,39 Gbps). Đĩa worker vẫn đạt ~110 MB/s khi chạy app I/O-bound: I/O chưa bão hoà, nên lợi ích của nén nhỏ
+  hơn so với một cụm nghẽn I/O.
+- **File text nén không chia nhỏ được** (lz4, zstd): ở đây vô hại vì mọi file < 1 block.
 - **zstd khác level**: shuffle level 1, file level 3.
-- **HDFS lưu 3 bản sao**: ghi output cũng sinh lưu lượng mạng; muốn xem riêng shuffle thì dùng
-  `shuffle_remote_read_bytes`.
+- **HDFS lưu 3 bản sao**: ghi output cũng sinh lưu lượng mạng, nên mạng đo bằng `sar` gồm cả HDFS, không chỉ shuffle.
 - `sortByKey` đọc input **hai lần** (một lần để lấy mẫu chia khoảng key).
-- Chỉ 3 lần lặp mỗi cấu hình (giới hạn thời gian và chi phí); error bar cho thấy độ dao động.
+- Chỉ 3 lần lặp mỗi cấu hình (giới hạn thời gian và chi phí); error bar cho thấy độ dao động nhỏ.
 
 ## 11. Câu hỏi bảo vệ thường gặp
 
@@ -240,8 +224,8 @@ Các cột chính của `runs.csv`:
 - **Vì sao xáo trộn thứ tự?** Để một khoảng thời gian cụm chậm không rơi vào toàn bộ một codec.
 - **CodecBench có đo đúng như Spark không?** Dùng đúng class codec của Spark với tham số mặc định; khác ở
   chỗ dữ liệu shuffle thật là bản ghi đã serialize, chia nhiều khối nhỏ. Tỉ lệ nén thật lấy từ HDFS và History Server.
-- **Vì sao chỉ LZ4 và Zstd trên cluster?** Bốn codec chia hai nhóm (nhanh/nén ít và chậm hơn/nén mạnh); mỗi
-  nhóm lấy một đại diện có mặt ở cả hai mức nén. Bench vẫn đo đủ 4 codec để chứng minh lựa chọn này (mục 7).
+- **Vì sao chọn LZ4 và Zstd?** Hai đầu của sự đánh đổi (nhanh/nén ít và nén nhiều/tốn CPU hơn), cả hai dùng
+  được cho file lẫn shuffle (Spark không có Gzip cho shuffle). Xem mục 7.
 - **Vì sao 150.000 đơn mỗi file?** Để file < 128 MB: mọi codec có cùng số task.
 - **Vì sao executor 3 GB?** Mặc định 1 GB làm dữ liệu tràn ra đĩa ở SF lớn, thời gian đo sẽ chủ yếu là thời gian tràn.
 - **Nếu IP nhà đổi?** `make up` lại: Terraform cập nhật tường lửa theo IP mới.

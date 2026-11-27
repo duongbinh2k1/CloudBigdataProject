@@ -9,9 +9,9 @@ at two levels:
 with three applications (I/O-bound, CPU-bound, balanced) and four dataset sizes (1, 5, 10, 20 GB),
 on a cluster of 8 EC2 machines (1 master + 7 workers).
 
-Codecs: the four codecs of the assignment (Gzip, Snappy, LZ4, Zstd) are first compared on one machine
-(`bench/CodecBench.java`). The cluster experiments then use the two ends of the trade-off, both
-available for files and for the shuffle: **LZ4** (fast, ratio ~1.9) and **Zstd** (ratio ~3.1), against no compression.
+Codecs: two of the four codecs of the assignment, **LZ4** (fast, ratio ~2) and **Zstd** (ratio ~3, more CPU),
+both available for files and for the shuffle, against no compression. Their intrinsic characteristics are
+measured on one machine by `bench/CodecBench.java`.
 
 Software: Java 11, Hadoop 3.4.1 (HDFS only), Spark 3.5.5 standalone, Spark jobs in Java (RDD API).
 Tools: Terraform (machines), Ansible (installation), `sar` + Spark History Server (measurements),
