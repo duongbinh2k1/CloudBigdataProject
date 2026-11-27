@@ -7,36 +7,9 @@ date: "November 2026"
 **Group:** *(names)* — USTH / INP-ENSEEIHT, M2 Cloud and Big Data\
 **Code, raw measurements and scripts:** `CloudBigdataProject/` (this repository)
 
-## Summary
+## 1. Objective
 
-We measured the gain and the cost of compression in Apache Spark at two levels - **storage** (text files on
-HDFS) and **communication** (shuffle data) - on a cluster of 8 AWS EC2 machines (1 master + 7 workers),
-with three applications of different profiles (I/O-bound, CPU-bound, balanced), four dataset sizes
-(1, 5, 10, 20 GB), two codecs on the cluster (LZ4, Zstd) plus the baseline without compression, and 3
-repetitions of every configuration: **216 runs, all successful, with a median coefficient of variation of
-1.3 %**. The four codecs of the assignment (Gzip, Snappy, LZ4, Zstd) were first compared on one machine.
-
-Main findings:
-
-1. **The codecs form two families.** LZ4 and Snappy compress little (≈ 2×) but fast (> 300 MB/s per core);
-   Zstd and Gzip compress ≈ 3.2–3.4×, but Gzip is 11× slower than Zstd. **Zstd gives the best
-   ratio/CPU trade-off; LZ4 the lowest CPU cost.**
-2. **Compression helps only when it reduces the bytes of the actual bottleneck.** At 20 GB, storage
-   compression with LZ4 makes the I/O-bound application **14 % faster**, shuffle compression with LZ4 makes
-   the balanced application **12 % faster**; the CPU-bound application never changes by more than 1.5 %.
-3. **Shuffle compression reduced the CPU time** of the executors (-13 % for both applications that
-   shuffle): writing, copying and sending twice as many bytes cost more CPU than LZ4 compression.
-4. **Benefits grow with the data size**: storage compression is slightly harmful at 1 GB (fixed costs
-   dominate), then its gains grow; the gains of shuffle compression also grow with the size.
-5. **Combining both levels does not simply add up**: for the balanced and CPU-bound jobs, C3 is slightly
-   slower than the best single level; only the I/O-bound job gains from combining (-13 %).
-
-## 1. Context and objectives
-
-Spark and Hadoop jobs move large volumes of data: they read and write files on the distributed file
-system (HDFS) and exchange intermediate data between tasks during the **shuffle** (between two stages,
-e.g. around a sort, a join or a group-by). Compression reduces the number of bytes stored, read, written
-and sent over the network, but costs CPU time to compress and decompress. The objective is to determine
+The objective is to determine
 experimentally **when compression improves or degrades performance**, depending on the codec, the
 application, the data size and the level at which it is applied:
 
@@ -57,19 +30,14 @@ application, the data size and the level at which it is applied:
 
 ![Figure 1 — Architecture of the cluster and communications (icons: AWS Architecture Icons).](figures/architecture.svg)
 
-**Reproducibility.** The whole infrastructure is code. **Terraform** creates the network, the firewall
-(SSH only from the operator's IP, everything allowed between the nodes) and the machines; **Ansible**
-installs Java, Hadoop and Spark with one shell script, writes `/etc/hosts` and the list of workers, sets
-up password-less SSH from the master and starts HDFS, Spark and the History Server. Automatic Ubuntu
-updates are disabled so that they do not disturb the measurements. Four commands run everything from a
-laptop: `make up` (cluster), `make run` (the whole study, in `tmux` on the master), `make fetch` (results)
-and `make down` (deletes every AWS resource). The same cluster and configuration were used for every run;
-only the compression settings change.
-
-**Note on the machines.** The account (AWS Free plan, 16 vCPU quota) only allows `m7i-flex` machines.
-Their CPU is not limited by credits, but their disk (baseline 39 MB/s) and network (baseline 0.39 Gbps)
-can burst above the baseline for a limited time. During the study the disks of the workers sustained
-about 110 MB/s (read + write) during the I/O-bound runs: the I/O was **not saturated** (Section 8).
+**Reproducibility and hardware.** The entire infrastructure is automated as code—**Terraform** provisions
+the VPC, firewall (SSH from the operator's IP only, unrestricted intra-cluster traffic), and EC2 nodes,
+while **Ansible** installs Java, Hadoop, and Spark, configures `/etc/hosts`, workers, and password-less SSH,
+disables automatic Ubuntu updates, and starts HDFS, Spark, and the History Server—so four commands
+(`make up`, `make run` in `tmux`, `make fetch`, `make down`) reproduce the full study on the exact same
+cluster with only compression settings varied. Under the AWS Free plan (16 vCPU quota), `m7i-flex` instances
+have non-credit-limited CPUs and burstable disk (39 MB/s baseline) and network (0.39 Gbps baseline); worker
+disks sustained ≈ 110 MB/s (read + write) during I/O-bound runs, meaning I/O was **not saturated**.
 
 ## 3. Workloads
 
@@ -197,17 +165,13 @@ the data at rest with the fast codec for the data sent once over the network.
 
 ![Figure 5 — Workflow of the study: commands on the laptop, steps on the master, protocol of one run.](figures/workflow.svg)
 
-**Fairness.** The 216 runs were executed in a random order (fixed seed), so that a slower period of the
-cluster does not fall on one codec; one warm-up run per application was not recorded; outputs are deleted
-after each run. The variability is low: the coefficient of variation of the execution time is 1.3 % in
-median and 5.7 % at most. Graphs show the mean of the 3 repetitions and the standard deviation as error bars.
-
-**Metrics.** Execution time (History Server); CPU time = sum of the CPU time of all tasks (it includes the
-compression and decompression work); disk = bytes read + written on the devices of the 8 machines (`sar`);
-network = bytes received by the 8 machines (`sar`); shuffle time = shuffle write time + time waiting for
-remote shuffle blocks; throughputs = volume / execution time (`analysis/tables/summary.csv`).
-
-The study ran on 26–27 November 2026 and took about 8.5 hours (the cluster was up about 10 hours, ≈ 10 USD).
+**Fairness and metrics.** To avoid temporal bias, all 216 runs were executed in fixed-seed random order
+after one unrecorded warm-up per application, with outputs deleted between runs; measurements show low
+variability (median CV 1.3 %, max 5.7 %), and graphs report the mean ± standard deviation of 3 repetitions.
+Metrics combine Spark History Server data—execution time, total task CPU time (including codec work), and
+shuffle time (write + remote fetch wait)—with `sar` totals across all 8 machines for disk (read + write)
+and network (received) volumes, yielding throughputs as volume / execution time (`analysis/tables/summary.csv`).
+The full study ran on 26–27 November 2026 in ≈ 8.5 hours (≈ 10 hours cluster uptime, ≈ 10 USD).
 
 ## 6. Results
 
@@ -259,16 +223,15 @@ the balanced job is the same at every size (LZ4 fastest, then Zstd, then no comp
 
 ![Figure 8 — Disk volume (read + write, all machines) vs dataset size.](../analysis/figures/fig3_disk_vs_size.png)
 
-Storage compression always reduces the bytes read, written and sent, in proportion to the compression
-ratio (Figures 8 and 9), and always costs CPU (Figure 7). It pays off only for the I/O-bound job, whose output
-(15.5 GB, written 3 times by HDFS) is its bottleneck: LZ4 removes 37 GB of disk I/O and 26 GB of network
-for 106 s of extra CPU spread over 14 cores, and the job is 14 % faster. Zstd removes even more bytes,
-but its compression (level 3, 181 MB/s) costs 268 s of CPU: the CPU becomes the limit and only 4 % is
-left. For the balanced and CPU-bound jobs, reading fewer bytes does not change the time, because reading
-is not what limits them. Table 5b shows the shift of the bottleneck: with compressed files the I/O-bound job
-waits much less for I/O (I/O wait 8.4 % → 1.6 %) and uses the CPU more (63 % → 75 %), while its disk and
-network throughputs drop by a third: **reducing disk I/O compensated the extra CPU cost with LZ4, only
-partly with Zstd, and not at all for the two other applications.**
+Storage compression consistently lowers disk and network volumes in proportion to the compression ratio
+(Figures 8 and 9) at the expense of extra CPU time (Figure 7), but only speeds up the I/O-bound job whose
+3×-replicated HDFS output (15.5 GB) is the bottleneck. With LZ4, cutting 37 GB of disk I/O and 26 GB of
+network traffic costs 106 s of extra CPU across 14 cores and yields a 14 % speedup; Zstd level 3 (181 MB/s)
+cuts even more I/O but adds 268 s of CPU, shifting the bottleneck to CPU and leaving only a 4 % gain. Table
+5b confirms this shift for the I/O-bound job (I/O wait drops 8.4 % → 1.6 %, CPU busy rises 63 % → 75 %, and
+I/O throughput drops by a third), whereas the balanced and CPU-bound jobs see no speedup because file reads
+do not limit them: **reducing disk I/O offset the CPU overhead with LZ4, only partly with Zstd, and not at
+all for the other two applications.**
 
 ### 6.3 Communication-level compression (E2)
 
@@ -288,23 +251,16 @@ total network throughput in `analysis/tables/summary.csv`.*
 
 ![Figure 9 — Network received (all machines) vs dataset size.](../analysis/figures/fig4_network_vs_size.png)
 
-Shuffle compression halves (LZ4) or divides by three (Zstd) the shuffle bytes, and **reduces the total
-CPU time** instead of increasing it. Spark serializes the shuffle records with the Java serializer, which
-produces verbose and very redundant bytes; compressing them with LZ4 costs less CPU than writing, copying
-and sending twice as many bytes through the operating system and the network stack (the CPU time measured
-includes this system time; the shuffle write time is divided by 2). Zstd compresses more but costs more
-CPU than LZ4, so it saves less CPU and less time. The time waiting for remote blocks is always below 1 s:
-**the network was never the bottleneck of the shuffle**.
-
-The balanced job, whose time is driven by its CPU (CPU share 0.79), turns the CPU saved into 12 % of time.
-The I/O-bound job saves as much CPU but no time: its bottleneck is the output written to HDFS, which shuffle
-compression does not change (its network traffic is dominated by the output replication and remote reads).
-So reducing the network traffic improved the performance only when the job was limited by the work of
-moving the shuffle, not by the network itself.
-
-**When shuffle compression is counterproductive.** Zstd on the I/O-bound shuffle is 1.1–1.4 % slower at
-SF 10–20 (it costs more CPU than LZ4 for a job that is not limited by the shuffle); at SF 1 both codecs make
-the I/O-bound job 1–2 % slower; and the CPU-bound job's tiny shuffle grows with compression (ratio 0.65).
+Shuffle compression cuts shuffle volume by 2× (LZ4) or 3× (Zstd) and **reduces total CPU time**: because
+Spark's Java serializer emits verbose, redundant bytes, compressing with LZ4 takes less CPU than writing,
+copying, and sending twice the data through the OS and network stack (halving shuffle write time), whereas
+Zstd's higher compression cost yields smaller CPU and time savings. Remote block fetch wait stays under
+1 s—**the network was never the bottleneck**—so gains come from reducing shuffle-movement CPU work: the
+CPU-driven balanced job (CPU share 0.79) converts this CPU saving into a 12 % speedup, while the I/O-bound
+job saves similar CPU but no wall time because its bottleneck is 3×-replicated HDFS output (and remote
+reads). Shuffle compression becomes counterproductive with Zstd on the I/O-bound job at SF 10–20 (1.1–1.4 %
+slower), with either codec on I/O-bound at SF 1 (1–2 % slower), and on the CPU-bound job's tiny shuffle,
+which expands under compression (ratio 0.65).
 
 ### 6.4 Combined compression (E3)
 
@@ -379,26 +335,8 @@ already compressed or random (Table 3: ratio 1.00, Gzip then spends 26 ms of CPU
 when the shuffle is tiny (compression increased it); and when the CPU is already the bottleneck, where a
 slow codec (Zstd level 3, and even more Gzip) turns saved bytes into lost time (I/O-bound with Zstd files).
 
-## 8. Limitations and threats to validity
 
-- **I/O not saturated.** The `m7i-flex` disks and network can burst above their baseline, and the long
-  CPU-bound runs let their credits recover; the disks sustained ≈ 110 MB/s per worker and the shuffle
-  never waited for the network. On a cluster with slower disks or network the gains of compression would be
-  larger, and Zstd could overtake LZ4.
-- **Data locality.** About 60 % of the HDFS blocks were read from a remote DataNode, so the network volume
-  includes HDFS reads and output replication, not only the shuffle. Shuffle traffic alone is given by the
-  `shuffle_remote_read_bytes` metric (Table 6).
-- **Two codecs on the cluster.** Snappy and Gzip were only measured by the micro-benchmark. From their
-  characteristics, Snappy should behave like LZ4, and Gzip like a slower Zstd (storage only).
-- **Different Zstd levels**: level 1 for the shuffle (Spark's default), level 3 for files (Hadoop's default).
-- **Small files.** Files are smaller than one HDFS block on purpose; with large files, non-splittable
-  compressed text would also reduce the parallelism.
-- **Three repetitions** per configuration (cost and time); the variability is low (median 1.3 %), so the
-  differences above 3 % discussed here are larger than the noise.
-- **Java serializer.** With Spark's Kryo serializer the shuffle would be more compact and shuffle
-  compression would probably save less CPU.
-
-## 9. Conclusion
+## 8. Conclusion
 
 Compression is neither free nor always useful. On an 8-machine Spark cluster, it improved execution time by
 up to 14 % when it removed bytes from the actual bottleneck — the replicated output of an I/O-bound job,
@@ -408,25 +346,7 @@ offers a much better ratio for little more CPU and would be preferable when disk
 Gzip is dominated. A counter-intuitive result is that shuffle compression reduced the CPU time, because
 moving uncompressed serialized data costs more than compressing it.
 
-## Appendix A — Coverage of the assignment
-
-| Requirement | Where |
-|---|---|
-| §2 distributed HDFS, Spark, several workers | Section 2, Figure 1 (7 workers) |
-| §2 monitoring of CPU, memory, disk I/O, network | `sar` on 8 machines + History Server (Section 2); Tables 2, 5b, 6 |
-| §2 reproducible environment, same configuration for every codec | Terraform + Ansible + `make` (Section 2, Appendix B); one cluster for the 216 runs |
-| §3 three applications, same engine, characterised with CPU, disk, network | Section 3.2, Table 2 |
-| §4 Snappy, LZ4, Gzip, Zstd + baseline; ratio, compression / decompression time, CPU | Section 4.2, Table 3, Figure 3 (all four); cluster: LZ4, Zstd, none (Section 4.3) |
-| §5.1 size, overhead, time, CPU, disk volume and throughput, several sizes; does less I/O compensate the CPU? | Section 6.2, Tables 1, 5, 5b, Figures 6–8 |
-| §5.2 time, network volume and throughput, CPU overhead, shuffle time; when counterproductive | Section 6.3, Table 6, Figures 7, 9 |
-| §5.3 C0, C1, C2, C3 | Section 6.4, Table 7, Figure 10 |
-| §5.4 several sizes, change of the relative performance | Section 6.1, Section 7 (question 4), Table 4 |
-| §6 the seven required graphs, units, legends, variability | Figures 6, 7, 8, 9, 4, 10, 11 (error bars = standard deviation of 3 runs) |
-| §6 the seven questions | Section 7 |
-| §7 infrastructure, raw results, scripts, report | Appendix B |
-| §7 oral presentation | separate slides |
-
-## Appendix B — Reproducing the study
+## Appendix — Reproducing the study
 
 | Path | Content |
 |---|---|
