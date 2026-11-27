@@ -9,14 +9,14 @@ date: "November 2026"
 
 ## Summary
 
-We measured the gain and the cost of compression in Apache Spark at two levels — **storage** (text files on
-HDFS) and **communication** (shuffle data) — on a cluster of 8 AWS EC2 machines (1 master + 7 workers),
+We measured the gain and the cost of compression in Apache Spark at two levels - **storage** (text files on
+HDFS) and **communication** (shuffle data) - on a cluster of 8 AWS EC2 machines (1 master + 7 workers),
 with three applications of different profiles (I/O-bound, CPU-bound, balanced), four dataset sizes
 (1, 5, 10, 20 GB), two codecs on the cluster (LZ4, Zstd) plus the baseline without compression, and 3
 repetitions of every configuration: **216 runs, all successful, with a median coefficient of variation of
 1.3 %**. The four codecs of the assignment (Gzip, Snappy, LZ4, Zstd) were first compared on one machine.
 
-Main findings (detailed in Section 7):
+Main findings:
 
 1. **The codecs form two families.** LZ4 and Snappy compress little (≈ 2×) but fast (> 300 MB/s per core);
    Zstd and Gzip compress ≈ 3.2–3.4×, but Gzip is 11× slower than Zstd. **Zstd gives the best
@@ -24,12 +24,12 @@ Main findings (detailed in Section 7):
 2. **Compression helps only when it reduces the bytes of the actual bottleneck.** At 20 GB, storage
    compression with LZ4 makes the I/O-bound application **14 % faster**, shuffle compression with LZ4 makes
    the balanced application **12 % faster**; the CPU-bound application never changes by more than 1.5 %.
-3. **Shuffle compression *reduced* the CPU time** of the executors (−13 % for both applications that
+3. **Shuffle compression reduced the CPU time** of the executors (-13 % for both applications that
    shuffle): writing, copying and sending twice as many bytes cost more CPU than LZ4 compression.
 4. **Benefits grow with the data size**: storage compression is slightly harmful at 1 GB (fixed costs
    dominate), then its gains grow; the gains of shuffle compression also grow with the size.
 5. **Combining both levels does not simply add up**: for the balanced and CPU-bound jobs, C3 is slightly
-   slower than the best single level; only the I/O-bound job gains from combining (−13 %).
+   slower than the best single level; only the I/O-bound job gains from combining (-13 %).
 
 ## 1. Context and objectives
 
@@ -118,18 +118,6 @@ time; *data moved per CPU second* = (input + shuffle written + shuffle read + ou
 *Table 2 — Workload characterisation, SF 20, no compression (mean of 3 runs; CPU busy, I/O wait and
 memory: mean over the 8 machines, so the mostly idle master lowers them). Memory never exceeded 38 % and
 no run spilled to disk, so memory was not a limiting resource.*
-
-The three applications are clearly separated and keep the same order at every size
-(`analysis/tables/workload_characterisation.csv`). The CPU-bound job spends 98 % of its task time on the
-CPU and moves 38× fewer bytes per CPU second than the I/O-bound job; the I/O-bound job is off the CPU
-45 % of its task time (waiting for disk, network or remote data) and has the highest I/O wait; the balanced job is in between on every metric.
-The I/O-bound job is I/O-bound *relative to the others*: on this cluster it still uses the CPU 55 % of the
-time (parsing, sorting, serialization).
-
-Accounting check for the I/O-bound job (64 GB of network): shuffle fetched from other machines 14.8 GB
-+ HDFS replication of the output (15.5 GB × 2 remote replicas) 31 GB + remote reads of HDFS blocks
-≈ 18 GB. Remote reads also explain the 9.1 GB of network of the CPU-bound job, which has no shuffle:
-about 60 % of the HDFS blocks were read from another machine.
 
 ## 4. Compression algorithms
 
