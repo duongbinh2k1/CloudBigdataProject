@@ -30,7 +30,7 @@ The cluster has 8 machines of type `m7i-flex.large` (2 vCPU, 8 GB of RAM, 100 GB
 zone. The master runs the HDFS NameNode, the Spark Master, the History Server and the driver of the jobs. Each
 of the 7 workers runs an HDFS DataNode and a Spark executor with 2 cores and 3 GB of memory. We use Hadoop 3.4.1
 (only HDFS, with 3 replicas) and Spark 3.5.5 with the default settings, except the executor memory (3 GB
-instead of 1 GB, otherwise the large datasets spill to disk). Terraform creates the machines and Ansible
+instead of the default 1 GB). Terraform creates the machines and Ansible
 installs and starts Hadoop and Spark, so the same cluster can be created again with `make up`.
 
 For the monitoring, `sar` records the CPU, memory, disk and network usage of every machine each second. The
@@ -118,7 +118,7 @@ For the balanced job, LZ4 reduces the shuffle data from 10.9 GB to 6.0 GB and Zs
 goes from 20.0 GB to 16.2 GB and 14.3 GB (Figure 4), and the network throughput from 119 MB/s to 110 and 95 MB/s.
 We expected the CPU time to increase, but it decreased (from 1722 s to 1499 s with LZ4), and the shuffle time
 was divided by 2 (from 28.3 s to 15.2 s). Writing and sending half of the data saved more CPU than the
-compression cost. Since the balanced job is limited by its CPU, it is 12 % faster. The I/O-bound job also uses
+compression cost. Since the balanced job is limited by its CPU (CPU share 0.79 and 2.2 % I/O wait in Table 1), it is 12 % faster. The I/O-bound job also uses
 less CPU (from 821 s to 712 s) but it is not faster. In both jobs the tasks waited less than 1 s in total for
 remote shuffle data, so the network was not the bottleneck. Shuffle compression made the jobs slower in three
 cases: Zstd for the I/O-bound job at SF 10 and SF 20 (1 % slower), both codecs for the I/O-bound job at SF 1,
@@ -130,7 +130,7 @@ and the CPU-bound job, where the very small shuffle (about 100 bytes per task) b
 
 The compression ratios measured on the cluster are close to the ones of the micro-benchmark (Figure 5, left).
 For the I/O-bound job, C3 is the fastest configuration, with 87 % of the time of C0. With Zstd files the job is
-limited by the CPU, so the CPU saved by the shuffle compression reduces its time (from 113.5 s with C1 to 103.3 s
+limited by the CPU (75 % CPU busy, 1.2 % I/O wait), so the CPU saved by the shuffle compression reduces its time (from 113.5 s with C1 to 103.3 s
 with C3). For the balanced job, C3 is up to 2.5 % slower than C2, and for the CPU-bound job C3 is the slowest
 configuration (+1.5 %). Each job is only faster when compression is applied where its bottleneck is
 (Figure 5, right).
