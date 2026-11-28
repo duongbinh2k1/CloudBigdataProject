@@ -1,22 +1,22 @@
 ---
 # install and start hdfs + spark
-- name: Wait until the new machines accept SSH
+- name: Wait for the machines
   hosts: all
   gather_facts: false
   tasks:
-    - name: Wait for SSH
+    - name: Wait for ssh
       ansible.builtin.wait_for_connection:
         timeout: 300
 
-- name: Every machine
+- name: All machines
   hosts: all
   become: true
   tasks:
-    - name: Hostname = name in the inventory (master, worker1...)
+    - name: Set hostname
       ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
 
-    - name: /etc/hosts with the private IP of every machine, so that they call each other by name
+    - name: Write /etc/hosts
       ansible.builtin.copy:
         dest: /etc/hosts
         content: |
@@ -25,60 +25,60 @@
           {{ hostvars[host].private_ip }} {{ host }}
           {% endfor %}
 
-    - name: No automatic Ubuntu updates during the measurements
+    - name: Disable automatic updates
       ansible.builtin.command: systemctl disable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer
       failed_when: false
 
-    - name: Copy cluster/ (installation script and configuration files)
+    - name: Copy cluster folder
       ansible.builtin.copy:
         src: ../../cluster/
         dest: /opt/cluster/
 
-    - name: Install Java, Hadoop and Spark
+    - name: Install java, hadoop and spark
       ansible.builtin.command: bash /opt/cluster/install.sh
 
-    - name: List of the workers for Hadoop (start-dfs.sh)
+    - name: Workers file for hadoop
       ansible.builtin.copy:
         src: workers
         dest: /opt/hadoop/etc/hadoop/workers
 
-    - name: List of the workers for Spark (start-workers.sh) and run_experiments.py
+    - name: Workers file for spark
       ansible.builtin.copy:
         src: workers
         dest: /opt/spark/conf/workers
 
-- name: The master
+- name: Master
   hosts: master
   become: true
   become_user: ubuntu
   tasks:
-    # the public key is already on every machine, so the master can ssh to all of them
-    - name: SSH key of the laptop, copied to the master
+    # so that the master can ssh to the other machines
+    - name: Copy ssh key
       ansible.builtin.copy:
         src: ~/.ssh/cloud-bigdata-project
         dest: /home/ubuntu/.ssh/id_ed25519
         mode: "0600"
 
-    - name: Accept the host key of a machine the first time
+    - name: Ssh config
       ansible.builtin.copy:
         dest: /home/ubuntu/.ssh/config
         content: "Host *\n  StrictHostKeyChecking accept-new\n"
         mode: "0600"
 
-    - name: Start HDFS and Spark
+    - name: Start hdfs and spark
       ansible.builtin.command: bash -l /opt/cluster/start-cluster.sh
 
-    - name: Copy the Java code
+    - name: Copy java code
       ansible.builtin.copy:
         src: ../../java/src
         dest: /opt/work/java/
 
-    - name: Copy the build script
+    - name: Copy build script
       ansible.builtin.copy:
         src: ../../java/build.sh
         dest: /opt/work/java/
 
-    - name: Copy the experiment scripts
+    - name: Copy experiment scripts
       ansible.builtin.copy:
         src: "../../bench/{{ item }}"
         dest: /opt/work/bench/

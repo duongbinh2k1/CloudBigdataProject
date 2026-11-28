@@ -3,7 +3,6 @@ variable "region" {
 }
 
 variable "my_ip_cidr" {
-  description = "My public IP + /32, the only address allowed to SSH (set by make up)"
 }
 
 variable "instance_type" {

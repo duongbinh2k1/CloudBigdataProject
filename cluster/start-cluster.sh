@@ -7,7 +7,7 @@ set -e
 stop-dfs.sh || true
 start-dfs.sh
 hdfs dfsadmin -safemode wait
-hdfs dfs -mkdir -p /spark-logs /data /results
+hdfs dfs -mkdir -p /spark-logs /data
 
 # spark
 stop-history-server.sh || true
