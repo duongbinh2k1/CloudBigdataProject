@@ -51,7 +51,8 @@ Công nghệ dùng, mỗi cái một việc:
 
 ### Terraform (`infra/terraform/`)
 - `main.tf`: VPC + subnet + internet gateway (tài khoản không có mạng mặc định), security group,
-  key pair, 8 máy, và file `infra/ansible/inventory.ini` (IP của từng máy cho Ansible).
+  key pair, máy `master` và 7 máy `worker` (`count = 7`), rồi ghi 2 file cho Ansible:
+  `infra/ansible/inventory.ini` (IP của từng máy) và `infra/ansible/workers` (tên các worker).
 - Security group: cổng 22 chỉ mở cho **IP hiện tại của laptop**; giữa các máy trong cụm thì mở hết (`self = true`).
 - `variables.tf`: loại máy `m7i-flex.large` (2 vCPU, 8 GB; Free plan không cho `m5`), 7 worker
   (quota 16 vCPU = 8 máy), đĩa gp3 100 GB.
@@ -59,17 +60,18 @@ Công nghệ dùng, mỗi cái một việc:
 ### Ansible (`infra/ansible/cluster.yml`)
 1. Chờ máy nhận SSH.
 2. Trên mọi máy: đặt tên máy, ghi `/etc/hosts` (IP nội bộ + tên), tắt tự cập nhật Ubuntu
-   (để không làm nhiễu số đo), chạy `cluster/install.sh`, ghi file `workers`.
-3. SSH không mật khẩu từ master tới mọi máy.
-4. Trên master: `cluster/start-cluster.sh` (bật HDFS, Spark, History Server), copy code.
+   (để không làm nhiễu số đo), chạy `cluster/install.sh`, copy file `workers`.
+3. Trên master: copy khoá SSH của laptop sang (để master SSH được tới mọi máy), chạy
+   `cluster/start-cluster.sh` (bật HDFS, Spark, History Server), copy code.
 
-### SSH không mật khẩu: hai cặp khoá
-| Chặng | Khoá tạo bởi | Dùng cho |
-|---|---|---|
-| laptop → 8 máy | Makefile (`ssh-keygen`), Terraform gửi khoá công khai lên AWS | Ansible, `make run/shell/fetch` |
-| master → 8 máy | Ansible (`ssh-keygen` trên master, đọc khoá công khai, thêm vào `authorized_keys` mọi máy) | `start-dfs.sh`, `start-workers.sh`, `run_experiments.py` (xoá cache, bật `sar`) |
-
-Nguyên lý: khoá riêng nằm ở máy đi SSH, khoá công khai nằm trong `~/.ssh/authorized_keys` của máy được SSH vào.
+### SSH không mật khẩu: một cặp khoá
+- `make up` tạo cặp khoá `~/.ssh/cloud-bigdata-project` trên laptop (`ssh-keygen`). Terraform gửi **khoá công
+  khai** lên AWS, AWS ghi nó vào `~/.ssh/authorized_keys` của cả 8 máy: laptop SSH được vào mọi máy
+  (Ansible, `make run/shell/fetch`).
+- Ansible copy **khoá riêng** đó sang master. Vì khoá công khai đã có trên cả 8 máy, master cũng SSH được tới
+  mọi máy mà không cần mật khẩu (`start-dfs.sh`, `start-workers.sh`, `run_experiments.py` xoá cache, bật `sar`).
+- Nguyên lý: khoá riêng nằm ở máy đi SSH, khoá công khai nằm trong `authorized_keys` của máy được SSH vào.
+  Khoá riêng nằm trên master chỉ trong lúc cụm chạy; `make down` xoá máy là xoá luôn.
 
 ### Master tìm worker thế nào
 - Danh sách tên: file `workers` (`worker1`…`worker7`), Ansible ghi từ inventory.
@@ -134,7 +136,7 @@ một file lineitem 75 MB trong RAM, trên 1 luồng (nên thời gian = thời 
 - Zstd đo ở 2 mức vì cụm dùng cả hai: level 1 (mặc định của Spark, cho shuffle), level 3 (mặc định của
   Hadoop, cho file).
 - Chạy trên master trước các thí nghiệm (master rảnh, cùng loại máy với worker).
-- Kiểm chứng: tỉ lệ nén đo trên HDFS và trên shuffle (hình 5 của báo cáo) gần bằng bench.
+- Kiểm chứng: tỉ lệ nén đo trên HDFS và trên shuffle (hình 5 trái của báo cáo) gần bằng bench.
 
 | Codec | Tỉ lệ nén | Thời gian nén | Thời gian giải nén | Tốc độ nén |
 |---|---|---|---|---|
@@ -151,7 +153,7 @@ một file lineitem 75 MB trong RAM, trên 1 luồng (nên thời gian = thời 
 - Cả LZ4 và Zstd đều dùng được **ở cả hai mức** (file và shuffle), nên mọi thí nghiệm E1, E2, E3 so sánh
   cùng một cặp.
 
-## 8. Thí nghiệm (`bench/experiments.yaml`, `run_experiments.py`)
+## 8. Thí nghiệm (`bench/run_experiments.py`)
 
 6 cặp (codec lưu trữ, codec shuffle): E1 có 3 (none/off, lz4/off, zstd/off), E2 thêm 2 (none/lz4, none/zstd),
 E3 thêm C3 = zstd/lz4 (C0, C1, C2 đã có trong E1/E2).
@@ -181,23 +183,23 @@ Thông lượng đĩa và mạng (§5.1, §5.2) = lượng dữ liệu / thời 
 
 ## 9. Đồ thị và 7 câu hỏi của đề
 
-| Hình (báo cáo) | File | Nội dung (đề §6) |
+Báo cáo tối đa 5 trang, nên 7 đồ thị bắt buộc được gom vào 4 hình (hình 2–5 của báo cáo):
+
+| Hình (báo cáo) | File | Đồ thị đề yêu cầu (§6) |
 |---|---|---|
 | 2 | `fig1_time_vs_size` | thời gian theo kích thước, mỗi codec một đường (hàng 1: E1, hàng 2: E2) |
 | 3 | `fig2_cpu_vs_size` | CPU theo kích thước: chi phí nén |
 | 4 | `fig3_disk_network_vs_size` | hàng 1: đĩa theo kích thước (nén lưu trữ); hàng 2: mạng theo kích thước (nén shuffle) |
-| 5 | `fig4_compression_ratio` | tỉ lệ nén theo thuật toán: bench, file HDFS, shuffle |
-| 6 | `fig5_configurations` | thời gian của C0–C3, SF lớn nhất |
-| 7 | `fig6_workload_type` | % nhanh hơn so với không nén, theo loại app |
+| 5 | `fig4_ratio_configurations_workload` | 3 ô: tỉ lệ nén theo thuật toán; thời gian C0–C3; thời gian theo loại workload |
 
 | Câu hỏi | Trả lời bằng |
 |---|---|
-| 1. Codec nào cân bằng tốt nhất giữa tỉ lệ nén và CPU? | bảng 2 (bench) + hình 2, 3 |
-| 2. Nén có luôn giúp app I/O-bound? | bảng 3, hình 7 |
-| 3. Nén ảnh hưởng app CPU-bound thế nào? | bảng 3, hình 7 |
+| 1. Codec nào cân bằng tốt nhất giữa tỉ lệ nén và CPU? | bảng 2 (bench) + mục 6 (so LZ4 và Zstd trên cụm) |
+| 2. Nén có luôn giúp app I/O-bound? | bảng 3, hình 5 phải |
+| 3. Nén ảnh hưởng app CPU-bound thế nào? | bảng 3, hình 5 phải |
 | 4. Lợi ích thay đổi thế nào khi dữ liệu lớn dần? | bảng 3, hình 2 |
-| 5. Nén lưu trữ hay nén mạng lợi hơn? | hình 7 trái vs phải, bảng 4 vs bảng 5 |
-| 6. Nén cả hai có làm chậm đi không? | hình 6: C3 so với C1, C2 |
+| 5. Nén lưu trữ hay nén mạng lợi hơn? | hình 5 phải, đoạn E1 và E2 của mục 6 |
+| 6. Nén cả hai có làm chậm đi không? | hình 5 giữa: C3 so với C1, C2 |
 | 7. Khi nào nên tắt nén? | dữ liệu nhỏ (SF 1), app CPU-bound, shuffle rất nhỏ, CPU đã là nút thắt |
 
 Đề nhấn mạnh: kết luận phải dựa trên **số đo**, không phải lý thuyết.

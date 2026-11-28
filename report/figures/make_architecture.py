@@ -45,7 +45,7 @@ parts.append('<g transform="translate(50,0)">')
 # --- the only frame: AWS Cloud
 parts.append('<rect x="250" y="10" width="860" height="480" fill="none" stroke="#232F3E" stroke-width="1.2"/>')
 icon("AWS-Cloud-logo_32", 250, 10, 32)
-text(290, 31, "AWS Cloud — Sydney (ap-southeast-2) · 8 × m7i-flex.large (2 vCPU, 8 GB)", 13, "bold")
+text(290, 31, "AWS Cloud, Sydney (ap-southeast-2), 8 x m7i-flex.large (2 vCPU, 8 GB)", 13, "bold")
 
 # laptop -> internet gateway (on the border of the AWS Cloud) -> master: straight lines only
 parts.append('<rect x="222" y="128" width="56" height="30" fill="#FFFFFF"/>')
@@ -60,7 +60,7 @@ text(258, 259, "AWS API (Terraform)", 10.5, "bold", "#545B64")
 icon("Arch_Amazon-EC2_48", 390, 70, 56)
 icon("Arch_Amazon-Elastic-Block-Store_48", 452, 70, 56)
 text(449, 145, "master", 13, "bold", anchor="middle")
-text(449, 161, "m7i-flex.large · EBS gp3 100 GB", 10.5, anchor="middle")
+text(449, 161, "m7i-flex.large, EBS gp3 100 GB", 10.5, anchor="middle")
 parts.append('<rect x="560" y="72" width="300" height="80" rx="6" fill="#FFFFFF" stroke="#ED7100"/>')
 for i, line in enumerate(["HDFS NameNode :9000", "Spark Master :7077", "Spark History Server :18080"]):
     text(576, 95 + 22 * i, line, 12.5)
@@ -70,8 +70,8 @@ arrow(449, 170, 449, 238, both=True)
 parts.append('<line x1="400" y1="240" x2="968" y2="240" stroke="#545B64" stroke-width="1"/>')
 for k in range(7):
     arrow(400 + 94.6 * k, 240, 400 + 94.6 * k, 268)
-text(468, 196, "↓ SSH: start DataNode / Worker, drop page cache, start / stop sar", 11, color="#545B64")
-text(468, 214, "↕ register + heartbeat (hdfs://master:9000, spark://master:7077), tasks and results", 11,
+text(468, 196, "SSH: start DataNode and Worker, drop page cache, start and stop sar", 11, color="#545B64")
+text(468, 214, "register and heartbeat (hdfs://master:9000, spark://master:7077), tasks and results", 11,
      color="#545B64")
 
 # --- 7 workers
@@ -79,14 +79,14 @@ for k in range(7):
     x = 400 + 94.6 * k
     icon("Arch_Amazon-EC2_48", x - 24, 270, 48)
     text(x, 334, f"worker{k + 1}", 11.5, "bold", anchor="middle")
-text(684, 360, "each worker: HDFS DataNode · Spark executor (2 cores, 3 GB)", 11.5, anchor="middle")
+text(684, 360, "each worker: HDFS DataNode, Spark executor (2 cores, 3 GB)", 11.5, anchor="middle")
 
 # --- worker <-> worker
 parts.append('<path d="M376,385 L376,402 L992,402 L992,385" fill="none" stroke="#2A6FD6" stroke-width="1.2"/>')
 for k in range(1, 6):
     parts.append(f'<line x1="{400 + 94.6 * k}" y1="385" x2="{400 + 94.6 * k}" y2="402" stroke="#2A6FD6" '
                  'stroke-width="1.2"/>')
-text(684, 424, "worker ↔ worker: shuffle · HDFS", 11.5, "bold", "#2A6FD6", anchor="middle")
+text(684, 424, "between workers: shuffle and HDFS", 11.5, "bold", "#2A6FD6", anchor="middle")
 text(684, 462, "Firewall: SSH only from the operator's IP; all traffic allowed between the 8 nodes (same network, one availability zone)",
      10.5, color="#545B64", anchor="middle")
 

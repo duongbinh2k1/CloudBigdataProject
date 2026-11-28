@@ -10,6 +10,7 @@ infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/ansible/inventory.ini
+infra/ansible/workers
 
 # Results of the old version of the project (local containers, first AWS test): not for the report
 results/dev/

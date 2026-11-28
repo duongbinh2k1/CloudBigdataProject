@@ -23,9 +23,10 @@ Python (experiment script, figures).
 | `infra/ansible/` | `cluster.yml`: installs and starts HDFS + Spark on the machines |
 | `cluster/` | installation script, Hadoop and Spark configuration, start script |
 | `java/src/compression/` | data generator (`DataGen`), the 3 apps (`IoBound`, `CpuBound`, `Balanced`), `Util` |
-| `bench/` | `experiments.yaml` (design), `run_all.sh` (whole study), `run_experiments.py` (runs + metrics), `CodecBench.java` |
+| `bench/` | `run_all.sh` (whole study), `run_experiments.py` (design of the experiments at the top, runs, metrics), `CodecBench.java` |
 | `analysis/` | `report.py`: figures and tables |
 | `results/` | raw measurements: `runs.csv`, `sar.tar.gz` (raw `sar` data, `tar xzf results/sar.tar.gz -C results`), `datasets/`, `codec_bench.csv`, `run.log` |
+| `report/` | technical report: `REPORT.md`, `REPORT.pdf` (5 pages), architecture diagram |
 | `docs/GIAI-THICH.md` | full explanation of the project and defence questions (Vietnamese) |
 
 ## Requirements (once)
@@ -41,13 +42,14 @@ All commands run on the laptop, in this folder.
 | Command | What it does |
 |---|---|
 | `make up` | Terraform creates the machines, Ansible installs and starts HDFS + Spark (~15 min) |
-| `make run` | starts the whole study on the master in `tmux` (build, datasets, codec benchmark, 216 runs; about 14-17 h). The laptop can be turned off |
+| `make run` | starts the whole study on the master in `tmux` (build, datasets, codec benchmark, 216 runs; about 8.5 h). The laptop can be turned off |
 | `make status` | last lines of the log and number of runs done |
 | `make fetch` | copies the results of the master to `results/` (do it regularly) |
 | `make analysis` | figures in `analysis/figures/`, tables in `analysis/tables/` |
+| `make report` | `report/REPORT.pdf` from `report/REPORT.md` (needs pandoc and Google Chrome) |
 | `make shell` | shell on the master; web UIs: HDFS http://localhost:9870, Spark http://localhost:8080, History Server http://localhost:18080 |
 | `make down` | deletes every AWS resource. **The cluster costs about 1.1 USD per hour, even when idle** |
 
 If the run stops, `make run` again: the runs already in `results/runs.csv` are skipped.
-After a change in the code or in `bench/experiments.yaml`: `make up` (copies the code again), then `make run`.
+After a change in the code: `make up` (copies the code again), then `make run`.
 `make up` restarts HDFS and Spark: never run it while a study is running.

@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y openjdk-11-jdk-headless python3-yaml sysstat libzstd1 tmux
+DEBIAN_FRONTEND=noninteractive apt-get install -y openjdk-11-jdk-headless sysstat libzstd1 tmux
 
 # download and unpack (only the first time)
 [ -d /opt/hadoop-3.4.1 ] || curl -fsSL https://archive.apache.org/dist/hadoop/common/hadoop-3.4.1/hadoop-3.4.1-lean.tar.gz | tar -xz -C /opt

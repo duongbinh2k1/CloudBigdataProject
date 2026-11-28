@@ -1,8 +1,3 @@
-# 1 master + N workers
-locals {
-  names = concat(["master"], [for i in range(1, var.worker_count + 1) : "worker${i}"])
-}
-
 # Ubuntu 22.04 x86_64 (x86_64 because Hadoop's native library, needed by zstd, is built for it)
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -75,32 +70,45 @@ resource "aws_key_pair" "key" {
   public_key = file(pathexpand("~/.ssh/cloud-bigdata-project.pub"))
 }
 
-resource "aws_instance" "node" {
-  for_each               = toset(local.names)
+# the master: HDFS NameNode, Spark Master, History Server, driver of the jobs
+resource "aws_instance" "master" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key.key_name
   subnet_id              = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.cluster.id]
-
   root_block_device {
-    volume_type = "gp3" # constant 3000 IOPS / 125 MB/s, no burst credits
+    volume_type = "gp3" # constant 3000 IOPS / 125 MB/s
     volume_size = var.disk_gb
   }
-
-  tags = { Name = "cloud-bigdata-project-${each.key}" }
+  tags = { Name = "cloud-bigdata-project-master" }
 }
 
-# Ansible inventory: public IP to connect, private IP for /etc/hosts.
+# the workers: HDFS DataNode + Spark Worker
+resource "aws_instance" "worker" {
+  count                  = var.worker_count
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  key_name               = aws_key_pair.key.key_name
+  subnet_id              = aws_subnet.main.id
+  vpc_security_group_ids = [aws_security_group.cluster.id]
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = var.disk_gb
+  }
+  tags = { Name = "cloud-bigdata-project-worker${count.index + 1}" }
+}
+
+# Ansible inventory: public IP to connect, private IP for /etc/hosts
 resource "local_file" "inventory" {
   filename = "${path.module}/../ansible/inventory.ini"
   content  = <<-EOT
     [masters]
-    master ansible_host=${aws_instance.node["master"].public_ip} private_ip=${aws_instance.node["master"].private_ip}
+    master ansible_host=${aws_instance.master.public_ip} private_ip=${aws_instance.master.private_ip}
 
     [workers]
-    %{for name in slice(local.names, 1, length(local.names))~}
-    ${name} ansible_host=${aws_instance.node[name].public_ip} private_ip=${aws_instance.node[name].private_ip}
+    %{for i, w in aws_instance.worker~}
+    worker${i + 1} ansible_host=${w.public_ip} private_ip=${w.private_ip}
     %{endfor~}
 
     [all:vars]
@@ -109,6 +117,16 @@ resource "local_file" "inventory" {
   EOT
 }
 
+# list of the workers, copied by Ansible to Hadoop and Spark
+resource "local_file" "workers" {
+  filename = "${path.module}/../ansible/workers"
+  content  = <<-EOT
+    %{for i, w in aws_instance.worker~}
+    worker${i + 1}
+    %{endfor~}
+  EOT
+}
+
 output "master_public_ip" {
-  value = aws_instance.node["master"].public_ip
+  value = aws_instance.master.public_ip
 }

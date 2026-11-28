@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.SplittableRandom;
-import java.util.stream.LongStream;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
@@ -28,6 +27,7 @@ public class DataGen {
     static final String[] PRIORITIES = {"1-URGENT", "2-HIGH", "3-MEDIUM", "4-NOT SPECIFIED", "5-LOW"};
     static final String[] INSTRUCTIONS = {"DELIVER IN PERSON", "COLLECT COD", "NONE", "TAKE BACK RETURN"};
     static final String[] MODES = {"REG AIR", "AIR", "RAIL", "SHIP", "TRUCK", "MAIL", "FOB"};
+    static final String[] FLAGS = {"R", "A"};
     static final String[] WORDS = ("furiously slyly carefully blithely quickly fluffily slowly quietly ruthlessly "
         + "thinly closely doggedly daringly bravely stealthily permanently enticingly idly busily regularly finally "
         + "ironically evenly boldly silently pending special express unusual regular final ironic even bold silent "
@@ -49,9 +49,8 @@ public class DataGen {
             fileNumbers.add(i);
         }
         JavaRDD<Integer> perFile = sc.parallelize(fileNumbers, files);   // one task = one file
-        JavaRDD<String> orderRows = perFile.flatMap(i -> keys(i, orders).mapToObj(DataGen::order).iterator());
-        JavaRDD<String> lineRows = perFile.flatMap(i -> keys(i, orders).boxed()
-            .flatMap(key -> lineItems(key).stream()).iterator());
+        JavaRDD<String> orderRows = perFile.flatMap(i -> ordersOfFile(i, orders).iterator());
+        JavaRDD<String> lineRows = perFile.flatMap(i -> lineItemsOfFile(i, orders).iterator());
 
         for (String codec : args[2].split(",")) {
             Util.save(orderRows, base + "/" + codec + "/orders", codec);
@@ -61,55 +60,89 @@ public class DataGen {
         sc.close();
     }
 
-    // order keys of file i
-    static LongStream keys(int i, long orders) {
-        return LongStream.rangeClosed(i * ORDERS_PER_FILE + 1, Math.min(orders, (i + 1) * ORDERS_PER_FILE));
+    // rows of the orders table in file i (order keys i * 150,000 + 1 ... (i + 1) * 150,000)
+    static List<String> ordersOfFile(int i, long orders) {
+        List<String> rows = new ArrayList<>();
+        for (long key = i * ORDERS_PER_FILE + 1; key <= Math.min(orders, (i + 1) * ORDERS_PER_FILE); key++) {
+            rows.add(order(key));
+        }
+        return rows;
+    }
+
+    static List<String> lineItemsOfFile(int i, long orders) {
+        List<String> rows = new ArrayList<>();
+        for (long key = i * ORDERS_PER_FILE + 1; key <= Math.min(orders, (i + 1) * ORDERS_PER_FILE); key++) {
+            rows.addAll(lineItems(key));
+        }
+        return rows;
     }
 
     static String order(long key) {
         SplittableRandom r = new SplittableRandom(key);
         LocalDate date = START.plusDays(r.nextInt(2405));      // first draw: the same in lineItems()
-        String status = date.plusDays(121).isBefore(CUTOFF) ? "F" : date.isAfter(CUTOFF) ? "O" : "P";
-        return String.join("|", "" + key, "" + (1 + r.nextInt(150_000)), status,
-            money(r.nextInt(100_000, 50_000_000)), date.toString(), pick(r, PRIORITIES),
-            "Clerk#" + String.format("%09d", 1 + r.nextInt(1_000)), "0", comment(r, 3, 12));
+        String status = "P";
+        if (date.plusDays(121).isBefore(CUTOFF)) {
+            status = "F";
+        } else if (date.isAfter(CUTOFF)) {
+            status = "O";
+        }
+        String customer = "" + (1 + r.nextInt(150_000));
+        String price = money(r.nextInt(100_000, 50_000_000));
+        String priority = pick(r, PRIORITIES);
+        String clerk = "Clerk#" + String.format("%09d", 1 + r.nextInt(1_000));
+        return key + "|" + customer + "|" + status + "|" + price + "|" + date + "|" + priority + "|" + clerk
+            + "|0|" + comment(r, 3, 12);
     }
 
     static List<String> lineItems(long key) {
         SplittableRandom r = new SplittableRandom(key);
         LocalDate orderDate = START.plusDays(r.nextInt(2405));
         int count = 1 + r.nextInt(7);
-        List<String> rows = new ArrayList<>(count);
+        List<String> rows = new ArrayList<>();
         for (int n = 1; n <= count; n++) {
             int quantity = 1 + r.nextInt(50);
             LocalDate ship = orderDate.plusDays(1 + r.nextInt(121));
             LocalDate commit = orderDate.plusDays(30 + r.nextInt(61));
             LocalDate receipt = ship.plusDays(1 + r.nextInt(30));
-            rows.add(String.join("|", "" + key, "" + (1 + r.nextInt(200_000)), "" + (1 + r.nextInt(10_000)),
-                "" + n, "" + quantity, money(quantity * (long) r.nextInt(90_000, 200_000)),
-                "0.0" + r.nextInt(10), "0.0" + r.nextInt(9), receipt.isAfter(CUTOFF) ? "N" : pick(r, "R", "A"),
-                ship.isAfter(CUTOFF) ? "O" : "F", ship.toString(), commit.toString(), receipt.toString(),
-                pick(r, INSTRUCTIONS), pick(r, MODES), comment(r, 2, 6)));
+            int part = 1 + r.nextInt(200_000);
+            int supplier = 1 + r.nextInt(10_000);
+            String price = money(quantity * (long) r.nextInt(90_000, 200_000));
+            String discount = "0.0" + r.nextInt(10);
+            String tax = "0.0" + r.nextInt(9);
+            String returnFlag = "N";
+            if (!receipt.isAfter(CUTOFF)) {
+                returnFlag = pick(r, FLAGS);
+            }
+            String status = "F";
+            if (ship.isAfter(CUTOFF)) {
+                status = "O";
+            }
+            rows.add(key + "|" + part + "|" + supplier + "|" + n + "|" + quantity + "|" + price + "|" + discount + "|"
+                + tax + "|" + returnFlag + "|" + status + "|" + ship + "|" + commit + "|" + receipt + "|"
+                + pick(r, INSTRUCTIONS) + "|" + pick(r, MODES) + "|" + comment(r, 2, 6));
         }
         return rows;
     }
 
-    static String pick(SplittableRandom r, String... choices) {
+    static String pick(SplittableRandom r, String[] choices) {
         return choices[r.nextInt(choices.length)];
     }
 
     // between min and max words of the vocabulary
     static String comment(SplittableRandom r, int min, int max) {
         int n = min + r.nextInt(max - min + 1);
-        StringBuilder text = new StringBuilder(WORDS[r.nextInt(WORDS.length)]);
+        String text = WORDS[r.nextInt(WORDS.length)];
         for (int i = 1; i < n; i++) {
-            text.append(' ').append(WORDS[r.nextInt(WORDS.length)]);
+            text = text + " " + WORDS[r.nextInt(WORDS.length)];
         }
-        return text.toString();
+        return text;
     }
 
     // 123456 cents -> "1234.56"
     static String money(long cents) {
-        return cents / 100 + (cents % 100 < 10 ? ".0" : ".") + cents % 100;
+        if (cents % 100 < 10) {
+            return cents / 100 + ".0" + cents % 100;
+        }
+        return cents / 100 + "." + cents % 100;
     }
 }
