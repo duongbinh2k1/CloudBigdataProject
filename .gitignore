@@ -5,14 +5,14 @@ __pycache__/
 # Build
 java/build/
 
-# Terraform state and the files it generates
+# Terraform
 infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/ansible/inventory.ini
 infra/ansible/workers
 
-# Results of the old version of the project (local containers, first AWS test): not for the report
+# old test results
 results/dev/
 results/aws-test/
 analysis/figures/dev/
@@ -20,8 +20,7 @@ analysis/figures/aws-test/
 
 .DS_Store
 
-# local samples (not part of the project)
 bench/.samples/
 
-# raw sar data: committed as results/sar.tar.gz (extract with: tar xzf results/sar.tar.gz -C results)
+# raw sar data is in results/sar.tar.gz
 results/sar/

@@ -1,9 +1,4 @@
-"""Figures (analysis/figures/) and tables (analysis/tables/) from results/. Run with: make analysis
-
-Every point or bar = mean of the 3 repetitions; error bars = standard deviation.
-E1 = runs with the shuffle not compressed (storage codec changes),
-E2 = runs with the files not compressed (shuffle codec changes).
-"""
+# figures and tables from results/ (make analysis)
 from pathlib import Path
 
 import matplotlib
@@ -26,7 +21,7 @@ def load_runs():
     runs["cpu_s"] = runs["executor_cpu_ns"] / 1e9
     runs["disk_gb"] = (runs["disk_read_bytes"] + runs["disk_write_bytes"]) / 1e9
     runs["net_gb"] = runs["net_rx_bytes"] / 1e9
-    runs["disk_mb_s"] = runs["disk_gb"] * 1000 / runs["time_s"]       # throughputs, all machines
+    runs["disk_mb_s"] = runs["disk_gb"] * 1000 / runs["time_s"]
     runs["net_mb_s"] = runs["net_gb"] * 1000 / runs["time_s"]
     runs["shuffle_gb"] = runs["shuffle_write_bytes"] / 1e9
     runs["shuffle_s"] = runs["shuffle_write_ns"] / 1e9 + runs["shuffle_fetch_wait_ms"] / 1000
@@ -34,7 +29,6 @@ def load_runs():
 
 
 def select(runs, app=None, sf=None, storage=None, shuffle=None):
-    """The runs with the given application, size, storage codec and shuffle codec."""
     if app is not None:
         runs = runs[runs["app"] == app]
     if sf is not None:
@@ -55,7 +49,7 @@ def save(fig, name):
 
 
 def plot_vs_size(ax, runs, app, level, metric, ylabel):
-    """One line per codec: metric vs dataset size, for E1 (level = storage) or E2 (level = shuffle)."""
+    # one line per codec, E1 (level = storage) or E2 (level = shuffle)
     for codec in ["none", "lz4", "zstd"]:
         if level == "storage":
             part = select(runs, app=app, storage=codec, shuffle="off")
@@ -72,7 +66,6 @@ def plot_vs_size(ax, runs, app, level, metric, ylabel):
 
 
 def figure_vs_size(runs, rows, name):
-    """2 x 3 figure: one row per (level, metric, label), one column per application."""
     fig, axes = plt.subplots(2, 3, figsize=(10, 4.6))
     for i, (level, metric, ylabel) in enumerate(rows):
         for j, app in enumerate(APPS):
@@ -82,21 +75,20 @@ def figure_vs_size(runs, rows, name):
 
 
 def percent_faster(runs, app, sf, storage, shuffle):
-    """Mean and std of the gain in %, compared with no compression."""
+    # gain in % compared with no compression
     base = select(runs, app, sf, "none", "off")["time_s"].mean()
     times = select(runs, app, sf, storage, shuffle)["time_s"]
     return (base - times.mean()) / base * 100, times.std() / base * 100
 
 
 def summary_figure(runs):
-    """Compression ratio of each codec, configurations C0-C3, and gain for each workload type (SF 20)."""
     fig, axes = plt.subplots(1, 3, figsize=(10, 2.9))
     sf = 20
 
-    # 1. compression ratio = size without compression / size with the codec
+    # compression ratio
     bench = pd.read_csv(RESULTS / "codec_bench.csv").groupby("codec")[["input_bytes", "compressed_bytes"]].mean()
     files = {}
-    for f in RESULTS.glob("datasets/sf*.txt"):          # output of hdfs dfs -du: size, size with replicas, path
+    for f in RESULTS.glob("datasets/sf*.txt"):   # output of hdfs dfs -du
         for line in f.read_text().splitlines():
             size, replicas, path = line.split()
             codec = path.split("/")[-2]
@@ -120,7 +112,7 @@ def summary_figure(runs):
     axes[0].set_title("Compression ratio vs algorithm")
     axes[0].legend()
 
-    # 2. execution time of C0-C3, relative to C0
+    # C0-C3
     for i, config in enumerate(CONFIGS):
         storage, shuffle = CONFIGS[config]
         means, errors = [], []
@@ -137,7 +129,7 @@ def summary_figure(runs):
     axes[1].set_title("Configurations C0-C3, SF 20")
     axes[1].legend(ncol=4)
 
-    # 3. % faster than without compression, for each workload type
+    # workload type
     cases = [("files lz4", "lz4", "off"), ("files zstd", "zstd", "off"), ("shuffle lz4", "none", "lz4"),
              ("shuffle zstd", "none", "zstd")]
     colors = ["lightsteelblue", "lightsalmon", "royalblue", "orangered"]
@@ -158,7 +150,6 @@ def summary_figure(runs):
 
 
 def tables(runs):
-    """Codec micro-benchmark, workload characterisation (no compression) and the means of every configuration."""
     TABLES.mkdir(parents=True, exist_ok=True)
     bench = pd.read_csv(RESULTS / "codec_bench.csv")
     bench["ratio"] = bench["input_bytes"] / bench["compressed_bytes"]
@@ -168,7 +159,7 @@ def tables(runs):
     bench.groupby("codec")[columns].median().round(3).to_csv(TABLES / "codec_bench.csv")
 
     c0 = select(runs, storage="none", shuffle="off").copy()
-    c0["cpu_share"] = c0["executor_cpu_ns"] / 1e6 / c0["executor_run_ms"]   # CPU time / task time
+    c0["cpu_share"] = c0["executor_cpu_ns"] / 1e6 / c0["executor_run_ms"]
     columns = ["time_s", "cpu_share", "cpu_busy_pct", "cpu_iowait_pct", "mem_used_pct", "disk_gb", "net_gb",
                "shuffle_gb"]
     c0.groupby(["app", "sf"])[columns].mean().round(3).to_csv(TABLES / "workload_characterisation.csv")

@@ -9,18 +9,16 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-// Code shared by the data generator and the three applications
 public class Util {
 
-    // Starts Spark and prints the application id (run_experiments.py reads it to get the metrics)
+    // print the app id, used by run_experiments.py
     static JavaSparkContext start(String name) {
         JavaSparkContext sc = new JavaSparkContext(new SparkConf().setAppName(name));
         System.out.println("APP_ID=" + sc.sc().applicationId());
         return sc;
     }
 
-    // STORAGE COMPRESSION: writes text files on HDFS with a Hadoop codec ("none" = not compressed).
-    // Reading needs nothing: sc.textFile() finds the codec from the file extension (.lz4, .zst).
+    // write the output with the storage codec (textFile reads it back using the file extension)
     static void save(JavaRDD<String> rdd, String path, String codec) throws Exception {
         new Path(path).getFileSystem(rdd.context().hadoopConfiguration()).delete(new Path(path), true);
         switch (codec) {
@@ -31,7 +29,7 @@ public class Util {
         }
     }
 
-    // The computation of the applications: SHA-256 applied `rounds` times, as a hex string
+    // sha256 applied several times
     static String sha256(String text, int rounds) throws Exception {
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
         String current = text;

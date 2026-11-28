@@ -1,9 +1,5 @@
-// Intrinsic characteristics of the two codecs of the study, LZ4 and Zstd (section 4 of the assignment), on
-// one machine, without Spark jobs, HDFS or network: compression ratio, compression and decompression time.
-// The codec classes are the ones Spark uses for the shuffle. Zstd is measured at level 1 (Spark's default, used
-// for the shuffle) and level 3 (Hadoop's default, used for the files).
-// One thread and the data in memory, so the time measured is CPU time.
-//   java -cp "$SPARK_HOME/jars/*" bench/CodecBench.java <text file> <out.csv>
+// compression ratio and compression / decompression time of lz4 and zstd on one file
+// usage: java -cp "$SPARK_HOME/jars/*" bench/CodecBench.java <text file> <out.csv>
 
 import java.io.*;
 import java.nio.file.*;
@@ -20,7 +16,7 @@ public class CodecBench {
         if (name.equals("lz4")) {
             return new LZ4CompressionCodec(conf);
         }
-        conf.set("spark.io.compression.zstd.level", name.substring(5));   // zstd-N
+        conf.set("spark.io.compression.zstd.level", name.substring(5));
         return new ZStdCompressionCodec(conf);
     }
 
@@ -30,7 +26,7 @@ public class CodecBench {
             csv.println("codec,repetition,input_bytes,compressed_bytes,compress_s,decompress_s");
             for (String name : CODECS) {
                 CompressionCodec codec = codec(name);
-                for (int rep = 0; rep < 7; rep++) {            // the first 2 warm up the JVM, not recorded
+                for (int rep = 0; rep < 7; rep++) {   // 2 warm up runs + 5 measured
                     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                     long t0 = System.nanoTime();
                     try (OutputStream out = codec.compressedOutputStream(buffer)) {

@@ -1,4 +1,0 @@
-# build context of dev/Dockerfile is the repository: only send what the image needs
-*
-!cluster
-!dev

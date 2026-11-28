@@ -7,23 +7,16 @@ import java.util.SplittableRandom;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-// Generates the two tables of the TPC-H benchmark used by the apps, as text (columns separated by '|'):
-//   orders   (1.5 million rows per SF): orderkey|custkey|status|totalprice|orderdate|priority|clerk|shippriority|comment
-//   lineitem (1 to 7 rows per order):  orderkey|partkey|suppkey|linenumber|quantity|price|discount|tax|
-//                                       returnflag|linestatus|shipdate|commitdate|receiptdate|shipinstruct|shipmode|comment
-// SF 1 = about 1 GB of text. One copy per storage codec in <base>/sf<SF>/<codec>/{orders,lineitem}.
-//
-// Every order has its own random generator, seeded with the order key: the data is always the same,
-// whatever the number of machines. 150,000 orders per file: each lineitem file (~75 MB) is smaller than
-// one HDFS block, so every codec gives the same number of tasks (compressed text files cannot be split).
-//
-// spark-submit --class compression.DataGen app.jar <sf> <base dir> <codec,codec,...>
+// generates the orders and lineitem tables (TPC-H like), one copy per codec
+// usage: DataGen <sf> <base dir> <codec,codec,...>
+// random generator seeded with the order key, so the data is always the same
+// 150000 orders per file so a lineitem file is smaller than one hdfs block
 public class DataGen {
 
     static final long ORDERS_PER_SF = 1_500_000;
     static final long ORDERS_PER_FILE = 150_000;
     static final LocalDate START = LocalDate.parse("1992-01-01");
-    static final LocalDate CUTOFF = LocalDate.parse("1995-06-17");   // the "current date" of TPC-H
+    static final LocalDate CUTOFF = LocalDate.parse("1995-06-17");
     static final String[] PRIORITIES = {"1-URGENT", "2-HIGH", "3-MEDIUM", "4-NOT SPECIFIED", "5-LOW"};
     static final String[] INSTRUCTIONS = {"DELIVER IN PERSON", "COLLECT COD", "NONE", "TAKE BACK RETURN"};
     static final String[] MODES = {"REG AIR", "AIR", "RAIL", "SHIP", "TRUCK", "MAIL", "FOB"};
@@ -48,7 +41,7 @@ public class DataGen {
         for (int i = 0; i < files; i++) {
             fileNumbers.add(i);
         }
-        JavaRDD<Integer> perFile = sc.parallelize(fileNumbers, files);   // one task = one file
+        JavaRDD<Integer> perFile = sc.parallelize(fileNumbers, files);
         JavaRDD<String> orderRows = perFile.flatMap(i -> ordersOfFile(i, orders).iterator());
         JavaRDD<String> lineRows = perFile.flatMap(i -> lineItemsOfFile(i, orders).iterator());
 
@@ -60,7 +53,6 @@ public class DataGen {
         sc.close();
     }
 
-    // rows of the orders table in file i (order keys i * 150,000 + 1 ... (i + 1) * 150,000)
     static List<String> ordersOfFile(int i, long orders) {
         List<String> rows = new ArrayList<>();
         for (long key = i * ORDERS_PER_FILE + 1; key <= Math.min(orders, (i + 1) * ORDERS_PER_FILE); key++) {
@@ -79,7 +71,7 @@ public class DataGen {
 
     static String order(long key) {
         SplittableRandom r = new SplittableRandom(key);
-        LocalDate date = START.plusDays(r.nextInt(2405));      // first draw: the same in lineItems()
+        LocalDate date = START.plusDays(r.nextInt(2405));
         String status = "P";
         if (date.plusDays(121).isBefore(CUTOFF)) {
             status = "F";
@@ -128,7 +120,6 @@ public class DataGen {
         return choices[r.nextInt(choices.length)];
     }
 
-    // between min and max words of the vocabulary
     static String comment(SplittableRandom r, int min, int max) {
         int n = min + r.nextInt(max - min + 1);
         String text = WORDS[r.nextInt(WORDS.length)];
@@ -138,7 +129,6 @@ public class DataGen {
         return text;
     }
 
-    // 123456 cents -> "1234.56"
     static String money(long cents) {
         if (cents % 100 < 10) {
             return cents / 100 + ".0" + cents % 100;

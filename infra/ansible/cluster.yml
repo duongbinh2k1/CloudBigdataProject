@@ -1,5 +1,5 @@
 ---
-# Installs and starts HDFS + Spark on the machines created by Terraform (list in inventory.ini)
+# install and start hdfs + spark
 - name: Wait until the new machines accept SSH
   hosts: all
   gather_facts: false
@@ -52,8 +52,7 @@
   become: true
   become_user: ubuntu
   tasks:
-    # The public key of this key pair is already on every machine (Terraform key pair), so the master can
-    # then SSH to every machine without password (start-dfs.sh, start-workers.sh, run_experiments.py)
+    # the public key is already on every machine, so the master can ssh to all of them
     - name: SSH key of the laptop, copied to the master
       ansible.builtin.copy:
         src: ~/.ssh/cloud-bigdata-project

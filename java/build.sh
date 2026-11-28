@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compiles the data generator and the 3 applications into java/build/app.jar
+# build java/build/app.jar
 set -e
 cd "$(dirname "$0")"
 rm -rf build && mkdir -p build/classes

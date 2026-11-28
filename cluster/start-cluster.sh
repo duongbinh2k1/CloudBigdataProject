@@ -1,15 +1,15 @@
 #!/bin/bash
-# Starts HDFS, Spark and the History Server, from the master (run by Ansible)
+# start hdfs, spark and the history server (on the master)
 set -e
 
-# HDFS: format the NameNode the first time only, then (re)start it
+# hdfs (format the namenode only the first time)
 [ -d /data/hdfs/namenode/current ] || hdfs namenode -format -nonInteractive
 stop-dfs.sh || true
 start-dfs.sh
 hdfs dfsadmin -safemode wait
 hdfs dfs -mkdir -p /spark-logs /data /results
 
-# Spark: master, workers, History Server
+# spark
 stop-history-server.sh || true
 stop-workers.sh || true
 stop-master.sh || true

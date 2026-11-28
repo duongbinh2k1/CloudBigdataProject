@@ -1,14 +1,14 @@
-# Ubuntu 22.04 x86_64 (x86_64 because Hadoop's native library, needed by zstd, is built for it)
+# ubuntu 22.04
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["099720109477"]
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 }
 
-# network: one public subnet in one availability zone
+# network
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -18,7 +18,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "main" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.region}a" # all nodes in the same zone (same network, no cross-zone cost)
+  availability_zone       = "${var.region}a"
   map_public_ip_on_launch = true
   tags                    = { Name = "cloud-bigdata-project" }
 }
@@ -40,7 +40,7 @@ resource "aws_route_table_association" "main" {
   route_table_id = aws_route_table.main.id
 }
 
-# SSH only from my IP; all traffic between the nodes of the cluster (HDFS, Spark, shuffle).
+# ssh only from my ip, everything allowed between the nodes
 resource "aws_security_group" "cluster" {
   name   = "cloud-bigdata-project"
   vpc_id = aws_vpc.main.id
@@ -70,7 +70,7 @@ resource "aws_key_pair" "key" {
   public_key = file(pathexpand("~/.ssh/cloud-bigdata-project.pub"))
 }
 
-# the master: HDFS NameNode, Spark Master, History Server, driver of the jobs
+# master
 resource "aws_instance" "master" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
@@ -78,13 +78,13 @@ resource "aws_instance" "master" {
   subnet_id              = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.cluster.id]
   root_block_device {
-    volume_type = "gp3" # constant 3000 IOPS / 125 MB/s
+    volume_type = "gp3"
     volume_size = var.disk_gb
   }
   tags = { Name = "cloud-bigdata-project-master" }
 }
 
-# the workers: HDFS DataNode + Spark Worker
+# workers
 resource "aws_instance" "worker" {
   count                  = var.worker_count
   ami                    = data.aws_ami.ubuntu.id
@@ -99,7 +99,7 @@ resource "aws_instance" "worker" {
   tags = { Name = "cloud-bigdata-project-worker${count.index + 1}" }
 }
 
-# Ansible inventory: public IP to connect, private IP for /etc/hosts
+# inventory for ansible
 resource "local_file" "inventory" {
   filename = "${path.module}/../ansible/inventory.ini"
   content  = <<-EOT
@@ -117,7 +117,7 @@ resource "local_file" "inventory" {
   EOT
 }
 
-# list of the workers, copied by Ansible to Hadoop and Spark
+# list of workers for hadoop and spark
 resource "local_file" "workers" {
   filename = "${path.module}/../ansible/workers"
   content  = <<-EOT

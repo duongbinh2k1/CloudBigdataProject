@@ -1,9 +1,5 @@
-"""Runs all the experiments and adds one line per run to results/runs.csv.
-On the master, in /opt/work: python3 bench/run_experiments.py   (runs already in runs.csv are skipped)
-
-For each run: empty the page cache and start `sar` on every machine, spark-submit the application,
-stop `sar`, then read the metrics of the run from the Spark History Server and from `sar`.
-"""
+# runs all the experiments, one line per run in results/runs.csv
+# usage (on the master, in /opt/work): python3 bench/run_experiments.py
 import csv
 import json
 import random
@@ -12,19 +8,13 @@ import time
 import urllib.request
 from pathlib import Path
 
-# ---- Design of the experiments (the sizes and storage codecs are also in run_all.sh) ----
-SIZES = [1, 5, 10, 20]                    # scale factor: SF 1 = about 1 GB of text
+# experiment parameters (sizes and codecs must be the same as in run_all.sh)
+SIZES = [1, 5, 10, 20]
 APPS = ["io_bound", "cpu_bound", "balanced"]
-CONFIGURATIONS = [                        # (storage codec, shuffle codec)
-    ("lz4", "off"),                       # E1: storage compression only
-    ("none", "lz4"),                      # E2: shuffle compression only (= C2)
-    ("none", "off"),                      # no compression (= C0)
-    ("none", "zstd"),                     # E2
-    ("zstd", "lz4"),                      # E3: both levels (= C3)
-    ("zstd", "off"),                      # E1 (= C1)
-]
+# (storage codec, shuffle codec): E1, E2 and C0-C3
+CONFIGURATIONS = [("lz4", "off"), ("none", "lz4"), ("none", "off"), ("none", "zstd"), ("zstd", "lz4"), ("zstd", "off")]
 REPETITIONS = 3
-SEED = 20261111                           # random order of the runs, the same every time
+SEED = 20261111
 
 RESULTS = Path("results")
 JAR = "java/build/app.jar"
@@ -37,7 +27,6 @@ COLUMNS = ["run_id", "status", "app", "sf", "storage", "shuffle", "rep", "time_s
 
 
 def on_node(node, command):
-    """Runs a shell command on a machine of the cluster, through SSH."""
     return subprocess.run(["ssh", node, command], capture_output=True, text=True).stdout
 
 
@@ -45,10 +34,10 @@ def spark_submit(app, sf, storage, shuffle, output):
     command = ["spark-submit", "--class", CLASSES[app]]
     if shuffle == "off":
         command += ["--conf", "spark.shuffle.compress=false", "--conf", "spark.shuffle.spill.compress=false"]
-    else:   # COMMUNICATION COMPRESSION with lz4 or zstd
+    else:
         command += ["--conf", "spark.shuffle.compress=true", "--conf", "spark.shuffle.spill.compress=true",
                     "--conf", "spark.io.compression.codec=" + shuffle]
-    data = "hdfs://master:9000/data/sf" + str(sf) + "/" + storage      # STORAGE COMPRESSION: input files
+    data = "hdfs://master:9000/data/sf" + str(sf) + "/" + storage
     command += [JAR, data + "/lineitem"]
     if app == "balanced":
         command += [data + "/orders"]
@@ -61,9 +50,9 @@ def get_json(url):
 
 
 def spark_metrics(app_id, row):
-    """Adds the metrics of the History Server to row (sum over the stages of the application)."""
+    # metrics of the history server (sum over the stages)
     completed = False
-    for attempt in range(90):      # the History Server reads the event log a few seconds after the end
+    for attempt in range(90):   # wait until the history server has the app
         try:
             app = get_json(HISTORY + app_id)
             completed = app["attempts"][-1]["completed"]
@@ -79,11 +68,11 @@ def spark_metrics(app_id, row):
     row["shuffle_write_bytes"] = row["shuffle_write_ns"] = row["shuffle_fetch_wait_ms"] = 0
     for stage in get_json(HISTORY + app_id + "/stages"):
         if stage["status"] == "COMPLETE":
-            row["executor_run_ms"] += stage["executorRunTime"]           # time spent by the tasks
-            row["executor_cpu_ns"] += stage["executorCpuTime"]           # CPU time (includes compression)
-            row["shuffle_write_bytes"] += stage["shuffleWriteBytes"]     # shuffle data (compressed size)
-            row["shuffle_write_ns"] += stage["shuffleWriteTime"]         # shuffle time = write time
-            row["shuffle_fetch_wait_ms"] += stage["shuffleFetchWaitTime"]   # + time waiting for remote data
+            row["executor_run_ms"] += stage["executorRunTime"]
+            row["executor_cpu_ns"] += stage["executorCpuTime"]
+            row["shuffle_write_bytes"] += stage["shuffleWriteBytes"]
+            row["shuffle_write_ns"] += stage["shuffleWriteTime"]
+            row["shuffle_fetch_wait_ms"] += stage["shuffleFetchWaitTime"]
 
 
 def mean(values):
@@ -93,14 +82,13 @@ def mean(values):
 
 
 def sar_metrics(sar_output, row):
-    """Adds the sar metrics to row. sar_output: machine -> output of `sadf -d` (one line per second).
-    CPU and memory: mean over the machines. Disk and network: bytes summed over the machines."""
+    # cpu and memory: mean over the machines, disk and network: total bytes
     busy, iowait, memory = [], [], []
     disk_read = disk_write = net_received = 0
     for text in sar_output.values():
         header = []
         for line in text.splitlines():
-            if line.startswith("#"):             # each report (-u, -r, -b, -n DEV) starts with its header
+            if line.startswith("#"):   # header line
                 header = line[1:].strip().split(";")
                 continue
             values = dict(zip(header, line.split(";")))
@@ -109,7 +97,7 @@ def sar_metrics(sar_output, row):
                 iowait.append(float(values["%iowait"]))
             elif "%memused" in values:
                 memory.append(float(values["%memused"]))
-            elif "bread/s" in values:            # blocks of 512 bytes per second
+            elif "bread/s" in values:   # 512 byte blocks
                 disk_read += float(values["bread/s"]) * 512
                 disk_write += float(values["bwrtn/s"]) * 512
             elif "IFACE" in values and values["IFACE"] != "lo":
@@ -123,7 +111,7 @@ def sar_metrics(sar_output, row):
 
 
 def run_once(app, sf, storage, shuffle, run_id):
-    for node in NODES:   # empty the page cache (data really read from disk), then 1 sar sample per second
+    for node in NODES:   # clear the page cache and start sar
         on_node(node, "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; "
                       "rm -f /tmp/sar.bin; nohup sar -o /tmp/sar.bin 1 >/dev/null 2>&1 &")
     output = "hdfs://master:9000/output/" + run_id
@@ -132,14 +120,14 @@ def run_once(app, sf, storage, shuffle, run_id):
     for node in NODES:
         sar_output[node] = on_node(node, "pkill -INT -x sar; sleep 1; sadf -d /tmp/sar.bin -- -u -r -b -n DEV")
 
-    folder = RESULTS / "sar" / run_id               # raw measurements of every machine
+    folder = RESULTS / "sar" / run_id
     folder.mkdir(parents=True, exist_ok=True)
     for node in NODES:
         (folder / (node + ".csv")).write_text(sar_output[node])
 
     row = {"run_id": run_id, "app": app, "sf": sf, "storage": storage, "shuffle": shuffle, "status": "failed"}
     app_id = None
-    for line in job.stdout.splitlines():         # the application prints APP_ID=...
+    for line in job.stdout.splitlines():
         if line.startswith("APP_ID="):
             app_id = line[len("APP_ID="):]
     if job.returncode != 0 or app_id is None:
@@ -165,8 +153,7 @@ def main():
         RESULTS.mkdir(exist_ok=True)
         runs_csv.write_text(",".join(COLUMNS) + "\n")
 
-    # every (application, size, configuration, repetition), in a random order fixed by the seed,
-    # so that a slow period of the cluster does not always fall on the same codec
+    # all the runs in a random order
     runs = []
     for app in APPS:
         for sf in SIZES:
@@ -183,7 +170,7 @@ def main():
     if not todo:
         return
 
-    for app in APPS:        # one warm-up run per application (JVM, HDFS), not recorded
+    for app in APPS:   # warm up, not recorded
         run_once(app, SIZES[0], "none", "off", "warmup_" + app)
 
     for i, (app, sf, storage, shuffle, rep, run_id) in enumerate(todo, 1):
