@@ -4,7 +4,7 @@ subtitle: "InfraCloud project, technical report"
 date: "November 2026"
 ---
 
-**Group:** *(names)*, USTH / INP-ENSEEIHT, M2 Cloud and Big Data\
+**Group:** *2*, USTH / INP-ENSEEIHT, M2 Cloud and Big Data\
 **Code, raw measurements and scripts:** repository `CloudBigdataProject`
 
 ## 1. Introduction
