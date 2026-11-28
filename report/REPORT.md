@@ -1,11 +1,10 @@
 ---
-title: "Experimental Evaluation of Data Compression in Spark"
-subtitle: "InfraCloud project, technical report"
-date: "November 2026"
+title: "InfraCloud Project: Experimental Evaluation of Data Compression in Hadoop or Spark"
 ---
 
-**Group:** *2*, USTH / INP-ENSEEIHT, M2 Cloud and Big Data\
-**Code, raw measurements and scripts:** repository `CloudBigdataProject`
+::: {.group}
+**Group:** *2*
+:::
 
 ## 1. Introduction
 
